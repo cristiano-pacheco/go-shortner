@@ -13,10 +13,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/cristiano-pacheco/go-shortner/cmd"
 	"github.com/cristiano-pacheco/go-shortner/test/integration/fixture"
 )
 
@@ -45,91 +45,113 @@ func TestServerCommand(t *testing.T) {
 	if err := listener.Close(); err != nil {
 		t.Fatal(err)
 	}
-	baseEnv := append(os.Environ(),
-		"APP_CONFIG_DIR="+filepath.Join(root, "config"),
-		"DATABASE_HOST="+pgHost,
-		"DATABASE_PORT="+pgPort,
+	settings := []string{
+		"APP_CONFIG_DIR=" + filepath.Join(root, "config"),
+		"APP_ENV=local",
+		"DATABASE_HOST=" + pgHost,
+		"DATABASE_PORT=" + pgPort,
 		"DATABASE_NAME=shortener",
 		"DATABASE_USER=shortener",
 		"DATABASE_PASSWORD=integration-only",
 		"DATABASE_SSLMODE=disable",
-		"REDIS_URL=redis://"+deps.RedisAddress+"/0",
+		"REDIS_URL=redis://" + deps.RedisAddress + "/0",
 		"API_KEY=integration-only-key",
 		"PUBLIC_BASE_URL=http://127.0.0.1:8080",
-		"HTTP_ADDR="+httpAddress,
-	)
+		"HTTP_ADDR=" + httpAddress,
+	}
+	baseEnv := append(os.Environ(), settings...)
 
 	t.Run("serves and closes dependency connections on SIGTERM", func(t *testing.T) {
 		pgBefore := postgresConnections(t, deps)
 		redisBefore := redisConnections(t, deps)
-		outputPath := filepath.Join(t.TempDir(), "server.log")
-		output, err := os.Create(outputPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer output.Close()
-		cmd := exec.Command(binary, "server")
-		cmd.Env = baseEnv
-		cmd.Stdout, cmd.Stderr = output, output
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		done := make(chan error, 1)
-		go func() { done <- cmd.Wait() }()
-		stopped := false
-		t.Cleanup(func() {
-			if !stopped {
-				_ = cmd.Process.Kill()
-				<-done
-			}
-		})
-		client := &http.Client{Timeout: time.Second}
-		deadline := time.Now().Add(15 * time.Second)
-		for {
-			resp, err := client.Get("http://" + httpAddress + "/health")
-			if err == nil {
-				resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					t.Fatalf("GET /health: status %d", resp.StatusCode)
-				}
-				break
-			}
-			select {
-			case err := <-done:
-				stopped = true
-				logs, _ := os.ReadFile(outputPath)
-				t.Fatalf("server exited before HTTP startup: %v\n%s", err, logs)
-			default:
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("server did not become ready")
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
+		app := fixture.StartApplication(t, binary, baseEnv, "http://"+httpAddress+"/health")
 		if got := postgresConnections(t, deps); got <= pgBefore {
 			t.Fatalf("expected a PostgreSQL connection: before=%d running=%d", pgBefore, got)
 		}
 		if got := redisConnections(t, deps); got <= redisBefore {
 			t.Fatalf("expected a Redis connection: before=%d running=%d", redisBefore, got)
 		}
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			t.Fatal(err)
-		}
-		select {
-		case err := <-done:
-			stopped = true
-			if err != nil {
-				logs, _ := os.ReadFile(outputPath)
-				t.Fatalf("server shutdown: %v\n%s", err, logs)
-			}
-		case <-time.After(15 * time.Second):
-			t.Fatal("server did not stop after SIGTERM")
-		}
+		app.Stop()
 		if got := postgresConnections(t, deps); got != pgBefore {
 			t.Fatalf("PostgreSQL connections after shutdown: want %d, got %d", pgBefore, got)
 		}
 		if got := redisConnections(t, deps); got != redisBefore {
 			t.Fatalf("Redis connections after shutdown: want %d, got %d", redisBefore, got)
+		}
+	})
+
+	t.Run("environment overlay overrides base and resolves environment variables", func(t *testing.T) {
+		configDir := t.TempDir()
+		base, err := os.ReadFile(filepath.Join(root, "config", "base.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(configDir, "base.yaml"), base, 0600); err != nil {
+			t.Fatal(err)
+		}
+		overlay := []byte("app:\n  api_key: \"env://OVERLAY_API_KEY\"\n")
+		if err := os.WriteFile(filepath.Join(configDir, "integration.yaml"), overlay, 0600); err != nil {
+			t.Fatal(err)
+		}
+		env := append(append([]string(nil), baseEnv...), "APP_CONFIG_DIR="+configDir, "APP_ENV=integration", "API_KEY=", "OVERLAY_API_KEY=overlay-secret")
+		app := fixture.StartApplication(t, binary, env, "http://"+httpAddress+"/health")
+		app.Stop()
+	})
+
+	t.Run("caller cancellation stops the command and closes connections", func(t *testing.T) {
+		for _, entry := range settings {
+			key, value, _ := strings.Cut(entry, "=")
+			t.Setenv(key, value)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		command := cmd.NewRootCommand()
+		command.SetArgs([]string{"server"})
+		go func() { done <- command.ExecuteContext(ctx) }()
+		finished := false
+		t.Cleanup(func() {
+			cancel()
+			if !finished {
+				<-done
+			}
+		})
+		client := &http.Client{Timeout: time.Second}
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			response, err := client.Get("http://" + httpAddress + "/health")
+			if err == nil {
+				response.Body.Close()
+				if response.StatusCode != http.StatusOK {
+					t.Fatalf("health endpoint returned status %d", response.StatusCode)
+				}
+				break
+			}
+			select {
+			case err := <-done:
+				finished = true
+				t.Fatalf("command exited before HTTP startup: %v", err)
+			default:
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("command did not become ready")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		cancel()
+		select {
+		case err := <-done:
+			finished = true
+			if err != nil {
+				t.Fatalf("command after cancellation: %v", err)
+			}
+		case <-time.After(15 * time.Second):
+			t.Fatal("command did not stop after cancellation")
+		}
+		if got := postgresConnections(t, deps); got != 0 {
+			t.Fatalf("PostgreSQL connections after cancellation: got %d", got)
+		}
+		if got := redisConnections(t, deps); got != 1 {
+			t.Fatalf("Redis connections after cancellation: got %d", got)
 		}
 	})
 
