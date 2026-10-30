@@ -15,7 +15,7 @@ import (
 
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{Use: "go-shortner", SilenceErrors: true, SilenceUsage: true}
-	root.AddCommand(&cobra.Command{Use: "server", Args: cobra.NoArgs, RunE: runServer})
+	root.AddCommand(&cobra.Command{Use: "server", Args: cobra.NoArgs, RunE: runServer}, newMigrateCommand())
 	return root
 }
 
