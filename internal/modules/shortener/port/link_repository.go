@@ -10,10 +10,10 @@ import (
 // List orders by creation time and ID descending. Count and page are separate
 // reads and need not reflect a single snapshot under concurrent writes.
 type LinkRepository interface {
-	Create(context.Context, model.Link) (model.Link, error)
-	FindByID(context.Context, int64) (model.Link, error)
-	FindByCode(context.Context, string) (model.Link, error)
-	List(context.Context, int, int) ([]model.Link, int64, error)
-	Update(context.Context, int64, model.LinkChanges) (model.Link, error)
-	Delete(context.Context, int64) (model.Link, error)
+	Create(context.Context, model.LinkModel) (model.LinkModel, error)
+	FindByID(context.Context, int64) (model.LinkModel, error)
+	FindByCode(context.Context, string) (model.LinkModel, error)
+	List(context.Context, int, int) ([]model.LinkModel, int64, error)
+	Update(context.Context, int64, model.LinkChanges) (model.LinkModel, error)
+	Delete(context.Context, int64) (model.LinkModel, error)
 }

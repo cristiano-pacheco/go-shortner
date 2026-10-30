@@ -3,15 +3,20 @@
 package migration_test
 
 import (
+	"context"
+	sqlpkg "database/sql"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cristiano-pacheco/go-shortner/test/integration/fixture"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func TestMigrationCommand(t *testing.T) {
@@ -50,6 +55,37 @@ func TestMigrationCommand(t *testing.T) {
 			t.Fatalf("migrate: %v\n%s", err, output)
 		}
 	}
+	// A competing transaction blocks schema_migrations reads until the migration
+	// connection's statement timeout stops the command.
+	dsn := url.URL{Scheme: "postgres", User: url.UserPassword("shortener", "integration-only"), Host: deps.PostgresAddress, Path: "/shortener", RawQuery: "sslmode=disable"}
+	db, err := sqlpkg.Open("pgx", dsn.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("LOCK TABLE schema_migrations IN ACCESS EXCLUSIVE MODE"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	blocked := exec.CommandContext(ctx, binary, "migrate")
+	blocked.Env = env
+	output, err := blocked.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("migration did not stop while blocked: %v", ctx.Err())
+	}
+	if err == nil || !strings.Contains(string(output), "database migration failed") {
+		t.Fatalf("blocked migration should fail: %v, %s", err, output)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
 	if got := sql("SELECT to_regclass('public.links') IS NOT NULL"); got != "t" {
 		t.Fatalf("links table missing: %s", got)
 	}

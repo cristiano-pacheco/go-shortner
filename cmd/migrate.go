@@ -25,7 +25,7 @@ func newMigrateCommand() *cobra.Command {
 				fx.Invoke(func(cfg config.Config, runner *bricksmigration.Runner) error {
 					address := url.URL{Scheme: "postgres", User: url.UserPassword(cfg.DatabaseUser, cfg.DatabasePassword),
 						Host: net.JoinHostPort(cfg.DatabaseHost, cfg.DatabasePort), Path: "/" + cfg.DatabaseName,
-						RawQuery: url.Values{"sslmode": {cfg.DatabaseSSLMode}, "connect_timeout": {"5"}}.Encode()}
+						RawQuery: url.Values{"sslmode": {cfg.DatabaseSSLMode}, "connect_timeout": {"5"}, "statement_timeout": {"5000"}}.Encode()}
 					if err := runner.Up(address.String()); err != nil {
 						// Driver errors can include a DSN and its credentials.
 						return errors.New("database migration failed")

@@ -61,11 +61,11 @@ func TestLinkRepository(t *testing.T) {
 	}
 	app, repo, _ := start()
 	expires := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
-	first, err := repo.Create(ctx, model.Link{Code: "first", Destination: "https://example.com", Active: true, ExpiresAt: &expires})
+	first, err := repo.Create(ctx, model.LinkModel{Code: "first", Destination: "https://example.com", Active: true, ExpiresAt: &expires})
 	if err != nil || first.ID <= 0 {
 		t.Fatalf("create: %+v %v", first, err)
 	}
-	second, err := repo.Create(ctx, model.Link{Code: "second", Destination: "https://example.com", Active: true})
+	second, err := repo.Create(ctx, model.LinkModel{Code: "second", Destination: "https://example.com", Active: true})
 	if err != nil || second.ID <= 0 || second.ID == first.ID {
 		t.Fatalf("duplicate destination: %+v %v", second, err)
 	}
@@ -87,7 +87,7 @@ func TestLinkRepository(t *testing.T) {
 		t.Fatalf("after restart: %+v %v", got, err)
 	}
 	// Equal timestamps exercise the identifier tie-breaker independently of timing.
-	if err := resources.DB.WithContext(ctx).Model(&model.Link{}).Where("id IN ?", []int64{first.ID, second.ID}).Update("created_at", first.CreatedAt).Error; err != nil {
+	if err := resources.DB.WithContext(ctx).Model(&model.LinkModel{}).Where("id IN ?", []int64{first.ID, second.ID}).Update("created_at", first.CreatedAt).Error; err != nil {
 		t.Fatal(err)
 	}
 	higher, lower := first.ID, second.ID
@@ -124,7 +124,11 @@ func TestLinkRepository(t *testing.T) {
 	if _, err := repo.Delete(ctx, first.ID); !errors.Is(err, errs.ErrLinkNotFound) {
 		t.Fatalf("delete twice: %v", err)
 	}
-	if _, err := repo.Create(ctx, model.Link{Code: first.Code, Destination: dest, Active: true}); !errors.Is(err, errs.ErrCodeConflict) {
+	if err := app.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	app, repo, resources = start()
+	if _, err := repo.Create(ctx, model.LinkModel{Code: first.Code, Destination: dest, Active: true}); !errors.Is(err, errs.ErrCodeConflict) {
 		t.Fatalf("reuse deleted code: %v", err)
 	}
 	links, total, err = repo.List(ctx, 10, 0)
@@ -138,7 +142,7 @@ func TestLinkRepository(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := repo.Create(ctx, model.Link{Code: "collision", Destination: dest, Active: true})
+			_, err := repo.Create(ctx, model.LinkModel{Code: "collision", Destination: dest, Active: true})
 			outcomes <- err
 		}()
 	}

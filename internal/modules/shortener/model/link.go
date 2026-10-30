@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-type Link struct {
+type LinkModel struct {
 	ID          int64  `gorm:"primaryKey;autoIncrement"`
 	Code        string `gorm:"not null;uniqueIndex"`
 	Destination string `gorm:"not null"`
@@ -13,7 +13,7 @@ type Link struct {
 	DeletedAt   *time.Time
 }
 
-func (Link) TableName() string { return "links" }
+func (LinkModel) TableName() string { return "links" }
 
 // LinkChanges describes fields to update. SetExpiresAt distinguishes clearing
 // expiration from leaving it unchanged.
