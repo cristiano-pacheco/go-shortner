@@ -22,7 +22,7 @@ func NewLinkRepository(resources *infrastructure.Resources) *LinkRepository {
 }
 
 func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (model.LinkModel, error) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	link.ID, link.CreatedAt, link.UpdatedAt, link.DeletedAt = 0, now, now, nil
 	err := gorm.G[model.LinkModel](r.resources.DB).Create(ctx, &link)
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
