@@ -36,12 +36,12 @@ func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (mode
 
 func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkModel, error) {
 	link, err := gorm.G[model.LinkModel](r.resources.DB).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
-	return found(link, err)
+	return r.found(link, err)
 }
 
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.LinkModel, error) {
 	link, err := gorm.G[model.LinkModel](r.resources.DB).Where("code = ? AND deleted_at IS NULL", code).Limit(1).First(ctx)
-	return found(link, err)
+	return r.found(link, err)
 }
 
 func (r *LinkRepository) List(ctx context.Context, limit, offset int) ([]model.LinkModel, int64, error) {
@@ -90,7 +90,7 @@ func (r *LinkRepository) mutate(ctx context.Context, id int64, values map[string
 	return link, nil
 }
 
-func found(link model.LinkModel, err error) (model.LinkModel, error) {
+func (r *LinkRepository) found(link model.LinkModel, err error) (model.LinkModel, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return model.LinkModel{}, errs.ErrLinkNotFound
 	}
