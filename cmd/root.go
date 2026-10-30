@@ -20,7 +20,7 @@ func NewRootCommand() *cobra.Command {
 }
 
 func runServer(cmd *cobra.Command, _ []string) (runErr error) {
-	app := fx.New(fx.NopLogger, fx.Provide(config.Load, infrastructure.NewResources), shortener.Module, fx.Invoke(httpserver.Register))
+	app := fx.New(fx.NopLogger, fx.Provide(config.Load, infrastructure.NewResources), shortener.Module, httpserver.Module)
 	if err := app.Err(); err != nil {
 		return err
 	}
