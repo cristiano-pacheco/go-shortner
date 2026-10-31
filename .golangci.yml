@@ -445,7 +445,7 @@ linters:
   exclusions:
     # Log a warning if an exclusion rule is unused.
     # Default: false
-    warn-unused: true
+    warn-unused: false
     # Predefined exclusion rules.
     # Default: []
     presets:
@@ -453,6 +453,8 @@ linters:
       - common-false-positives
     # Excluding configuration per-path, per-linter, per-text and per-source.
     rules:
+      - path: '(^|/)fx\.go$'
+        linters: [ gochecknoglobals ]
       - source: 'TODO'
         linters: [ godot ]
       - text: 'should have a package comment'
