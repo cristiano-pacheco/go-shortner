@@ -12,6 +12,7 @@ func NewLinkRouter(handler *handler.LinkHandler) *LinkRouter { return &LinkRoute
 
 func (r *LinkRouter) Register(router chi.Router) {
 	router.Post("/links", r.handler.Create)
+	router.Get("/links", r.handler.List)
 	router.Get("/links/{id}", r.handler.Get)
 }
 

@@ -8,6 +8,13 @@ type LinkCreateRequest struct {
 	ExpiresAt   *time.Time `json:"expires_at"`
 }
 
+type LinkListResponse struct {
+	Items    []LinkResponse `json:"items"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"page_size"`
+	Total    int64          `json:"total"`
+}
+
 type LinkResponse struct {
 	ID          int64      `json:"id"`
 	Code        string     `json:"code"`

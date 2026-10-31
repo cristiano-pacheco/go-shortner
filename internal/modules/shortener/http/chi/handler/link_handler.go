@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,7 @@ import (
 	"github.com/cristiano-pacheco/bricks/pkg/logger"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
 )
@@ -25,6 +27,7 @@ var (
 type LinkHandler struct {
 	linkCreateUseCase *usecase.LinkCreateUseCase
 	linkGetUseCase    *usecase.LinkGetUseCase
+	linkListUseCase   *usecase.LinkListUseCase
 	errorHandler      response.ErrorHandler
 	applicationLogger logger.Logger
 }
@@ -32,14 +35,54 @@ type LinkHandler struct {
 func NewLinkHandler(
 	linkCreateUseCase *usecase.LinkCreateUseCase,
 	linkGetUseCase *usecase.LinkGetUseCase,
+	linkListUseCase *usecase.LinkListUseCase,
 	errorHandler response.ErrorHandler,
 	applicationLogger logger.Logger,
 ) *LinkHandler {
 	return &LinkHandler{
 		linkCreateUseCase: linkCreateUseCase,
 		linkGetUseCase:    linkGetUseCase,
+		linkListUseCase:   linkListUseCase,
 		errorHandler:      errorHandler,
 		applicationLogger: applicationLogger,
+	}
+}
+
+func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
+	const defaultPageSize = 20
+	input := usecase.LinkListInput{Page: 1, PageSize: defaultPageSize}
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		h.errorHandler.Error(w, errInvalidInput)
+		return
+	}
+	for _, param := range []struct {
+		name  string
+		value *int
+	}{{"page", &input.Page}, {"page_size", &input.PageSize}} {
+		if values, ok := query[param.name]; ok {
+			if len(values) != 1 {
+				h.errorHandler.Error(w, errInvalidInput)
+				return
+			}
+			value, parseErr := strconv.Atoi(values[0])
+			if parseErr != nil {
+				h.errorHandler.Error(w, errInvalidInput)
+				return
+			}
+			*param.value = value
+		}
+	}
+	output, err := h.linkListUseCase.Execute(r.Context(), input)
+	if err != nil {
+		if errors.Is(err, errs.ErrInvalidInput) {
+			err = errInvalidInput
+		}
+		h.errorHandler.Error(w, err)
+		return
+	}
+	if err = response.JSON(w, http.StatusOK, mapper.ToLinkListResponse(output), nil); err != nil {
+		h.applicationLogger.Error("write link list response", logger.Error(err))
 	}
 }
 
