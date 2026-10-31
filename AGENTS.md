@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Glossary
+
+When interpreting domain terms, read `GLOSSARY.md`; when locating their implementation, use `GLOSSARY-MAP.md`.
+
 ### Make commands
 
 Before running or changing Make targets for tools, server startup, migrations, checks, tests, coverage, or code generation, read `docs/agents/make-commands.md` for commands, effects, prerequisites, and limitations.
