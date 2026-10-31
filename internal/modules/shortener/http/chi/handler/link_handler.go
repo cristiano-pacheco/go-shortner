@@ -64,20 +64,23 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 		name  string
 		value *int
 	}{{"page", &input.Page}, {"page_size", &input.PageSize}} {
-		if values, ok := query[param.name]; ok {
-			if len(values) != 1 {
-				h.errorHandler.Error(w, errInvalidInput)
-				return
-			}
-
-			value, parseErr := strconv.Atoi(values[0])
-			if parseErr != nil {
-				h.errorHandler.Error(w, errInvalidInput)
-				return
-			}
-
-			*param.value = value
+		values, ok := query[param.name]
+		if !ok {
+			continue
 		}
+
+		if len(values) != 1 {
+			h.errorHandler.Error(w, errInvalidInput)
+			return
+		}
+
+		value, parseErr := strconv.Atoi(values[0])
+		if parseErr != nil {
+			h.errorHandler.Error(w, errInvalidInput)
+			return
+		}
+
+		*param.value = value
 	}
 
 	output, err := h.linkListUseCase.Execute(r.Context(), input)

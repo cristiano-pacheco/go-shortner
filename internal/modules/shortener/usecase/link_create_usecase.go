@@ -55,13 +55,8 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 		return LinkCreateOutput{}, errs.ErrInvalidInput
 	}
 
-	if input.ExpiresAt != nil {
-		expiration := input.ExpiresAt.UTC().Truncate(time.Microsecond)
-		if !expiration.After(time.Now()) {
-			return LinkCreateOutput{}, errs.ErrInvalidInput
-		}
-
-		input.ExpiresAt = &expiration
+	if err := uc.normalizeExpiration(&input); err != nil {
+		return LinkCreateOutput{}, err
 	}
 
 	if input.Alias != nil && !uc.validAlias(*input.Alias) {
@@ -69,16 +64,9 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 	}
 
 	for range maxCodeAttempts {
-		var code string
-		if input.Alias != nil {
-			code = *input.Alias
-		} else {
-			var generateErr error
-
-			code, generateErr = uc.generator.Generate()
-			if generateErr != nil {
-				return LinkCreateOutput{}, generateErr
-			}
+		code, generateErr := uc.code(input.Alias)
+		if generateErr != nil {
+			return LinkCreateOutput{}, generateErr
 		}
 
 		link, createErr := uc.repository.Create(
@@ -106,6 +94,29 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 	}
 
 	return LinkCreateOutput{}, errors.New("automatic code generation exhausted retries")
+}
+
+func (uc *LinkCreateUseCase) normalizeExpiration(input *LinkCreateInput) error {
+	if input.ExpiresAt == nil {
+		return nil
+	}
+
+	expiration := input.ExpiresAt.UTC().Truncate(time.Microsecond)
+	if !expiration.After(time.Now()) {
+		return errs.ErrInvalidInput
+	}
+
+	input.ExpiresAt = &expiration
+
+	return nil
+}
+
+func (uc *LinkCreateUseCase) code(alias *string) (string, error) {
+	if alias != nil {
+		return *alias, nil
+	}
+
+	return uc.generator.Generate()
 }
 
 func (uc *LinkCreateUseCase) validDestination(destination string) bool {

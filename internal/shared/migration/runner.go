@@ -19,22 +19,8 @@ func NewRunner(params Params) (*bricksmigration.Runner, error) {
 	seen := make(map[string]bool)
 
 	for _, filesystem := range params.Files {
-		entries, err := fs.ReadDir(filesystem.FS, ".")
-		if err != nil {
-			return nil, fmt.Errorf("read migration files: %w", err)
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-
-			name := entry.Name()
-			if seen[name] {
-				return nil, fmt.Errorf("duplicate migration file: %s", name)
-			}
-
-			seen[name] = true
+		if err := collectFiles(filesystem, seen); err != nil {
+			return nil, err
 		}
 	}
 	// A version must identify one migration across all module contributions.
@@ -56,4 +42,26 @@ func NewRunner(params Params) (*bricksmigration.Runner, error) {
 	}
 
 	return bricksmigration.NewRunner(params.Files), nil
+}
+
+func collectFiles(filesystem bricksmigration.FileSystem, seen map[string]bool) error {
+	entries, err := fs.ReadDir(filesystem.FS, ".")
+	if err != nil {
+		return fmt.Errorf("read migration files: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if seen[name] {
+			return fmt.Errorf("duplicate migration file: %s", name)
+		}
+
+		seen[name] = true
+	}
+
+	return nil
 }
