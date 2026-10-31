@@ -49,7 +49,7 @@ vuln-check:
 
 .PHONY: nilaway
 nilaway:
-	nilaway --include-pkgs="github.com/cristiano-pacheco/jbn" --exclude-pkgs="vendor/" ./...
+	nilaway --include-pkgs="github.com/cristiano-pacheco/go-shortner" --exclude-pkgs="vendor/" ./...
 
 .PHONY: test
 test:
