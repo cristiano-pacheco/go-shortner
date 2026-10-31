@@ -1,11 +1,20 @@
 package dto
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type LinkCreateRequest struct {
 	Destination string     `json:"destination"`
 	Alias       *string    `json:"alias"`
 	ExpiresAt   *time.Time `json:"expires_at"`
+}
+
+type LinkUpdateRequest struct {
+	Destination json.RawMessage `json:"destination"`
+	Active      json.RawMessage `json:"active"`
+	ExpiresAt   json.RawMessage `json:"expires_at"`
 }
 
 type LinkListResponse struct {

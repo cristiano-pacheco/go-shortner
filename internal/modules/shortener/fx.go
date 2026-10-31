@@ -9,6 +9,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 )
 
 // Module owns link management and public resolution as they are implemented.
@@ -18,6 +19,8 @@ var Module = fx.Module("shortener", fx.Provide(
 	usecase.NewLinkCreateUseCase,
 	usecase.NewLinkGetUseCase,
 	usecase.NewLinkListUseCase,
+	usecase.NewLinkUpdateUseCase,
+	fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
 	handler.NewLinkHandler,
 	router.NewLinkRouter,
 	fx.Annotate((*router.LinkRouter).ManagementRoute, fx.ResultTags(`group:"management_routes"`)),

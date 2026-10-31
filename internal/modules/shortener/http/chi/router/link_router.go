@@ -15,6 +15,7 @@ func (r *LinkRouter) Register(router chi.Router) {
 	router.Post("/links", r.handler.Create)
 	router.Get("/links", r.handler.List)
 	router.Get("/links/{id}", r.handler.Get)
+	router.Patch("/links/{id}", r.handler.Update)
 }
 
 func (r *LinkRouter) ManagementRoute() httpserver.ManagementRoute { return r.Register }

@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 	"time"
 
@@ -33,26 +32,29 @@ type LinkCreateOutput struct {
 }
 
 type LinkCreateUseCase struct {
-	repository port.LinkRepository
-	generator  port.CodeGenerator
-	baseURL    string
+	repository           port.LinkRepository
+	generator            port.CodeGenerator
+	baseURL              string
+	destinationValidator port.DestinationValidator
 }
 
 func NewLinkCreateUseCase(
 	repository port.LinkRepository,
 	generator port.CodeGenerator,
+	destinationValidator port.DestinationValidator,
 	cfg config.Config,
 ) *LinkCreateUseCase {
 	return &LinkCreateUseCase{
-		repository: repository,
-		generator:  generator,
-		baseURL:    strings.TrimRight(cfg.PublicBaseURL, "/"),
+		repository:           repository,
+		generator:            generator,
+		destinationValidator: destinationValidator,
+		baseURL:              strings.TrimRight(cfg.PublicBaseURL, "/"),
 	}
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
-	if !uc.validDestination(input.Destination) {
-		return LinkCreateOutput{}, errs.ErrInvalidInput
+	if err := uc.destinationValidator.Validate(input.Destination); err != nil {
+		return LinkCreateOutput{}, err
 	}
 
 	if err := uc.normalizeExpiration(&input); err != nil {
@@ -117,13 +119,6 @@ func (uc *LinkCreateUseCase) code(alias *string) (string, error) {
 	}
 
 	return uc.generator.Generate()
-}
-
-func (uc *LinkCreateUseCase) validDestination(destination string) bool {
-	u, err := url.Parse(destination)
-
-	return len(destination) <= 4096 && err == nil && u != nil && (u.Scheme == "http" || u.Scheme == "https") &&
-		u.Hostname() != "" && u.User == nil
 }
 
 func (uc *LinkCreateUseCase) validAlias(alias string) bool {

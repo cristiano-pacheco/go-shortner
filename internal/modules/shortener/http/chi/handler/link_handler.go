@@ -29,6 +29,7 @@ type LinkHandler struct {
 	linkCreateUseCase *usecase.LinkCreateUseCase
 	linkGetUseCase    *usecase.LinkGetUseCase
 	linkListUseCase   *usecase.LinkListUseCase
+	linkUpdateUseCase *usecase.LinkUpdateUseCase
 	errorHandler      response.ErrorHandler
 	applicationLogger logger.Logger
 }
@@ -37,6 +38,7 @@ func NewLinkHandler(
 	linkCreateUseCase *usecase.LinkCreateUseCase,
 	linkGetUseCase *usecase.LinkGetUseCase,
 	linkListUseCase *usecase.LinkListUseCase,
+	linkUpdateUseCase *usecase.LinkUpdateUseCase,
 	errorHandler response.ErrorHandler,
 	applicationLogger logger.Logger,
 ) *LinkHandler {
@@ -44,8 +46,66 @@ func NewLinkHandler(
 		linkCreateUseCase: linkCreateUseCase,
 		linkGetUseCase:    linkGetUseCase,
 		linkListUseCase:   linkListUseCase,
+		linkUpdateUseCase: linkUpdateUseCase,
 		errorHandler:      errorHandler,
 		applicationLogger: applicationLogger,
+	}
+}
+
+func (h *LinkHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		h.errorHandler.Error(w, errInvalidInput)
+		return
+	}
+
+	var request *dto.LinkUpdateRequest
+	if err = httpserver.ReadJSON(r, &request); err != nil {
+		h.errorHandler.Error(w, err)
+		return
+	}
+
+	if request == nil {
+		h.errorHandler.Error(w, errInvalidInput)
+		return
+	}
+
+	input, err := mapper.ToLinkUpdateInput(id, *request)
+	if err != nil {
+		h.errorHandler.Error(w, errInvalidInput)
+		return
+	}
+
+	output, err := h.linkUpdateUseCase.Execute(r.Context(), input)
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrInvalidInput):
+			err = errInvalidInput
+		case errors.Is(err, errs.ErrLinkNotFound):
+			err = errLinkNotFound
+		}
+
+		h.errorHandler.Error(w, err)
+
+		return
+	}
+
+	if err = response.JSON(
+		w,
+		http.StatusOK,
+		dto.LinkResponse{
+			ID:          output.ID,
+			Code:        output.Code,
+			Destination: output.Destination,
+			ShortURL:    output.ShortURL,
+			Active:      output.Active,
+			ExpiresAt:   output.ExpiresAt,
+			CreatedAt:   output.CreatedAt,
+			UpdatedAt:   output.UpdatedAt,
+		},
+		nil,
+	); err != nil {
+		h.applicationLogger.Error("write link update response", logger.Error(err))
 	}
 }
 
