@@ -15,6 +15,7 @@ var Module = fx.Module("shortener", fx.Provide(
 	fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 	fx.Annotate(service.NewCodeGeneratorService, fx.As(new(port.CodeGenerator))),
 	usecase.NewLinkCreateUseCase,
+	usecase.NewLinkGetUseCase,
 	handler.NewLinkHandler,
 	router.NewLinkRouter,
 	fx.Annotate((*router.LinkRouter).ManagementRoute, fx.ResultTags(`group:"management_routes"`)),
