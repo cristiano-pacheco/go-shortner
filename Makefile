@@ -16,11 +16,7 @@ all: install-libs lint test cover
 
 .PHONY: install-libs
 install-libs:
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/vektra/mockery/v3@latest
-	go install github.com/swaggo/swag/cmd/swag@latest
-	go install go.uber.org/nilaway/cmd/nilaway@latest
+	./scripts/install-tools.sh
 
 # ==============================================================================
 # Administration
@@ -41,14 +37,17 @@ static: lint vuln-check nilaway
 
 .PHONY: lint
 lint:
+	./scripts/install-tools.sh golangci-lint
 	$(shell go env GOBIN | grep . || printf '%s/bin' "$(shell go env GOPATH)")/golangci-lint run ./... --allow-parallel-runners
 
 .PHONY: vuln-check
 vuln-check:
+	./scripts/install-tools.sh govulncheck
 	govulncheck -show verbose ./... 
 
 .PHONY: nilaway
 nilaway:
+	./scripts/install-tools.sh nilaway
 	nilaway --include-pkgs="github.com/cristiano-pacheco/go-shortner" --exclude-pkgs="vendor/" ./...
 
 .PHONY: test
@@ -89,5 +88,5 @@ update-mocks:
 
 .PHONY: update-swagger
 update-swagger:
-	go install github.com/swaggo/swag/cmd/swag@latest
+	./scripts/install-tools.sh swag
 	swag i --parseDependency -o swagger

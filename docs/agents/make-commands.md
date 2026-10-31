@@ -11,9 +11,9 @@ Run commands from the repository root. Use the table to select a target, then ch
 | `make run` | Start the server with `go run ./main.go server`. |
 | `make migrate` | Apply database migrations with `go run ./main.go db:migrate`; changes the configured database. |
 | `make static` | Run `lint`, `vuln-check`, and `nilaway`. |
-| `make lint` | Run golangci-lint across `./...`, allowing parallel lint runners. Resolves the executable from `GOBIN`, falling back to `GOPATH/bin`. |
-| `make vuln-check` | Run govulncheck across `./...` with verbose findings. |
-| `make nilaway` | Run nilaway for nil-safety analysis; see the package-filter limitation below. |
+| `make lint` | Install the pinned golangci-lint version, then run it across `./...`, allowing parallel lint runners. Resolves the executable from `GOBIN`, falling back to `GOPATH/bin`. |
+| `make vuln-check` | Install govulncheck, then run it across `./...` with verbose findings. |
+| `make nilaway` | Install nilaway, then run it for nil-safety analysis. |
 | `make test` | Run `go test ./...` with default build tags; excludes tests gated by `integration` or `e2e`. |
 | `make test-integration` | Delegate integration tests to `./scripts/integration-test.sh test`. |
 | `make test-integration-race` | Delegate integration tests with race detection to `./scripts/integration-test.sh test-race`. |
@@ -27,7 +27,7 @@ Run commands from the repository root. Use the table to select a target, then ch
 
 - Use the Go version declared in `go.mod`. Race-enabled targets require CGO support and a C compiler.
 - The Makefile loads and exports `.env` when present. Check the selected environment before starting the server or applying migrations; `.env.example` and `config/` describe application configuration.
-- Install development tools with `make install-libs` when needed. Targets invoking tools by name require Go's binary directory on `PATH`; `lint` resolves its own executable path.
+- Install development tools with `make install-libs`, or install selected tools with `./scripts/install-tools.sh` followed by their names. These commands, `make lint`, `make vuln-check`, and `make nilaway` need network access and write to Go's binary directory. Targets invoking tools by name require that directory on `PATH`; `lint` resolves its own executable path.
 - Integration tests require Docker and Docker Compose. The helper script uses the Docker CLI configuration, and fixtures create and remove isolated service containers and volumes.
 
 ## Current limitations
