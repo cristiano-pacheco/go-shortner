@@ -4,17 +4,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
-	"github.com/stretchr/testify/suite"
 )
 
 type DestinationValidatorSuite struct {
 	suite.Suite
+
 	validator *validator.DestinationValidator
 }
 
 func TestDestinationValidatorSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(DestinationValidatorSuite))
 }
 

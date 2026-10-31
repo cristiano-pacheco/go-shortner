@@ -8,15 +8,18 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
 )
 
 type CodeGeneratorServiceSuite struct {
 	suite.Suite
+
 	generator *service.CodeGeneratorService
 }
 
+//nolint:paralleltest // Tests temporarily replace the process-wide random source.
 func TestCodeGeneratorServiceSuite(t *testing.T) {
 	suite.Run(t, new(CodeGeneratorServiceSuite))
 }
@@ -35,9 +38,11 @@ func (s *CodeGeneratorServiceSuite) TestGenerateProducesEightAlphanumericCharact
 
 func (s *CodeGeneratorServiceSuite) TestGenerateMapsRandomValuesToAlphabet() {
 	original := rand.Reader
+	//nolint:reassign // Supply deterministic random values.
 	rand.Reader = bytes.NewReader([]byte{0, 25, 26, 51, 52, 61, 1, 60})
+
 	s.T().Cleanup(func() {
-		rand.Reader = original
+		rand.Reader = original //nolint:reassign // Restore the process-wide source.
 	})
 
 	code, err := s.generator.Generate()
@@ -49,13 +54,15 @@ func (s *CodeGeneratorServiceSuite) TestGenerateMapsRandomValuesToAlphabet() {
 func (s *CodeGeneratorServiceSuite) TestGenerateReturnsErrorWithoutPartialCode() {
 	expectedErr := errors.New("random source failed")
 	original := rand.Reader
+	//nolint:reassign // Simulate a random source failure.
 	rand.Reader = io.MultiReader(bytes.NewReader([]byte{0, 1}), iotest.ErrReader(expectedErr))
+
 	s.T().Cleanup(func() {
-		rand.Reader = original
+		rand.Reader = original //nolint:reassign // Restore the process-wide source.
 	})
 
 	code, err := s.generator.Generate()
 
-	s.ErrorIs(err, expectedErr)
+	s.ErrorIs(err, expectedErr) //nolint:testifylint // Check the returned code even when the error differs.
 	s.Empty(code)
 }

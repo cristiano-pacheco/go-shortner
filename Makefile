@@ -2,11 +2,7 @@
 SHELL_PATH = /bin/ash
 SHELL = $(if $(wildcard $(SHELL_PATH)),/bin/ash,/bin/bash)
 
-# Load environment variables from .env file if it exists
-ifneq (,$(wildcard ./.env))
-    include .env
-    export
-endif
+COMPOSE_ENV_FILE ?= .env
 
 .PHONY: all
 all: install-libs lint test cover
@@ -23,11 +19,37 @@ install-libs:
 
 .PHONY: run
 run:
-	go run ./main.go server
+	@set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run ./main.go server
+
+.PHONY: migrate-local
+migrate-local:
+	@set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run ./main.go migrate
+
+# ==============================================================================
+# Docker Compose
+
+COMPOSE = docker compose --env-file "$(COMPOSE_ENV_FILE)" -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml
+
+.PHONY: setup
+setup:
+	@COMPOSE_ENV_FILE="$(COMPOSE_ENV_FILE)" ./scripts/setup.sh
+
+.PHONY: docker-up
+docker-up:
+	$(COMPOSE) up -d --wait postgres redis
 
 .PHONY: migrate
 migrate:
-	go run ./main.go db:migrate
+	$(COMPOSE) build app
+	$(COMPOSE) run --rm app migrate
+
+.PHONY: docker-run
+docker-run:
+	$(COMPOSE) up -d --build app
+
+.PHONY: docker-down
+docker-down:
+	$(COMPOSE) down
 
 # ==============================================================================
 # Running tests within the local computer

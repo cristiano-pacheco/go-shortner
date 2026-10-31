@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
-	"github.com/stretchr/testify/suite"
 )
 
 type LinkUpdateMapperSuite struct {
@@ -16,6 +17,8 @@ type LinkUpdateMapperSuite struct {
 }
 
 func TestLinkUpdateMapperSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(LinkUpdateMapperSuite))
 }
 

@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
-	"github.com/stretchr/testify/suite"
 )
 
 type LinkListMapperSuite struct {
@@ -15,6 +16,8 @@ type LinkListMapperSuite struct {
 }
 
 func TestLinkListMapperSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(LinkListMapperSuite))
 }
 
@@ -24,8 +27,25 @@ func (s *LinkListMapperSuite) TestMapsItemsAndPagination() {
 	expires := created.Add(24 * time.Hour)
 	output := usecase.LinkListOutput{
 		Items: []usecase.LinkListItem{
-			{ID: 1, Code: "abc", Destination: "https://example.com", ShortURL: "https://short/abc", Active: true, ExpiresAt: &expires, CreatedAt: created, UpdatedAt: updated},
-			{ID: 2, Code: "def", Destination: "https://example.org", ShortURL: "https://short/def", Active: false, CreatedAt: updated, UpdatedAt: created},
+			{
+				ID:          1,
+				Code:        "abc",
+				Destination: "https://example.com",
+				ShortURL:    "https://short/abc",
+				Active:      true,
+				ExpiresAt:   &expires,
+				CreatedAt:   created,
+				UpdatedAt:   updated,
+			},
+			{
+				ID:          2,
+				Code:        "def",
+				Destination: "https://example.org",
+				ShortURL:    "https://short/def",
+				Active:      false,
+				CreatedAt:   updated,
+				UpdatedAt:   created,
+			},
 		},
 		Page: 2, PageSize: 10, Total: 12,
 	}
@@ -34,8 +54,25 @@ func (s *LinkListMapperSuite) TestMapsItemsAndPagination() {
 
 	s.Equal(dto.LinkListResponse{
 		Items: []dto.LinkResponse{
-			{ID: 1, Code: "abc", Destination: "https://example.com", ShortURL: "https://short/abc", Active: true, ExpiresAt: &expires, CreatedAt: created, UpdatedAt: updated},
-			{ID: 2, Code: "def", Destination: "https://example.org", ShortURL: "https://short/def", Active: false, CreatedAt: updated, UpdatedAt: created},
+			{
+				ID:          1,
+				Code:        "abc",
+				Destination: "https://example.com",
+				ShortURL:    "https://short/abc",
+				Active:      true,
+				ExpiresAt:   &expires,
+				CreatedAt:   created,
+				UpdatedAt:   updated,
+			},
+			{
+				ID:          2,
+				Code:        "def",
+				Destination: "https://example.org",
+				ShortURL:    "https://short/def",
+				Active:      false,
+				CreatedAt:   updated,
+				UpdatedAt:   created,
+			},
 		},
 		Page: 2, PageSize: 10, Total: 12,
 	}, response)
