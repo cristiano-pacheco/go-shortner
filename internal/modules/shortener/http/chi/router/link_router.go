@@ -1,9 +1,10 @@
 package router
 
 import (
+	"github.com/go-chi/chi/v5"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/handler"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
-	"github.com/go-chi/chi/v5"
 )
 
 type LinkRouter struct{ handler *handler.LinkHandler }

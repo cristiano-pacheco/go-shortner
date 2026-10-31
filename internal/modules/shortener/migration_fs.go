@@ -2,6 +2,7 @@ package shortener
 
 import (
 	bricksmigration "github.com/cristiano-pacheco/bricks/pkg/migration"
+
 	shortenermigration "github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/migration"
 )
 

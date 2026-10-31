@@ -27,7 +27,9 @@ func (g *CodeGeneratorService) Generate() (string, error) {
 		if err != nil {
 			return "", err
 		}
+
 		code[i] = alphabet[n.Int64()]
 	}
+
 	return string(code), nil
 }

@@ -7,12 +7,13 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 )
 
 const (
@@ -29,6 +30,7 @@ type Resources struct {
 
 func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 	r := &Resources{}
+
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			dsn := &url.URL{
@@ -43,6 +45,7 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 			q.Set("connect_timeout", "3")
 			q.Set("TimeZone", "UTC")
 			dsn.RawQuery = q.Encode()
+
 			db, err := gorm.Open(
 				postgres.Open(dsn.String()),
 				&gorm.Config{
@@ -54,24 +57,31 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 			if err != nil {
 				return errors.New("cannot initialize PostgreSQL")
 			}
+
 			sqlDB, err := db.DB()
 			if err != nil {
 				return errors.New("cannot initialize PostgreSQL pool")
 			}
+
 			sqlDB.SetMaxOpenConns(maxOpenConnections)
 			sqlDB.SetMaxIdleConns(maxIdleConnections)
+
 			pingCtx, cancel := context.WithTimeout(ctx, postgresPingTimeout)
 			err = sqlDB.PingContext(pingCtx)
+
 			cancel()
+
 			if err != nil {
 				_ = sqlDB.Close()
 				return errors.New("cannot connect to PostgreSQL")
 			}
+
 			opts, err := redis.ParseURL(cfg.RedisURL)
 			if err != nil {
 				_ = sqlDB.Close()
 				return errors.New("invalid Redis URL")
 			}
+
 			opts.DialTimeout = time.Second
 			opts.ReadTimeout = time.Second
 			opts.WriteTimeout = time.Second
@@ -81,24 +91,32 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 			client := redis.NewClient(opts)
 			pingCtx, cancel = context.WithTimeout(ctx, redisPingTimeout)
 			err = client.Ping(pingCtx).Err()
+
 			cancel()
+
 			if err != nil {
 				_ = client.Close()
 				_ = sqlDB.Close()
+
 				return errors.New("cannot connect to Redis")
 			}
+
 			r.DB = db
 			r.Redis = client
+
 			return nil
 		},
 		OnStop: func(context.Context) error {
 			err := r.Redis.Close()
+
 			sqlDB, dbErr := r.DB.DB()
 			if dbErr == nil {
 				dbErr = sqlDB.Close()
 			}
+
 			return errors.Join(err, dbErr)
 		},
 	})
+
 	return r
 }

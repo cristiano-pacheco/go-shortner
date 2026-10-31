@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/infrastructure"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
+
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/infrastructure"
 )
 
 const (
@@ -29,6 +30,7 @@ type PublicRoute func(chi.Router)
 
 type serverParams struct {
 	fx.In
+
 	Lifecycle        fx.Lifecycle
 	Shutdown         fx.Shutdowner
 	Config           config.Config
@@ -52,6 +54,7 @@ func Register(params serverParams) {
 	})
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Use(params.Authentication.Authenticate)
+
 		for _, register := range params.ManagementRoutes {
 			register(r)
 		}
@@ -74,11 +77,13 @@ func Register(params serverParams) {
 			if err != nil {
 				return err
 			}
+
 			go func() {
 				if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 					_ = params.Shutdown.Shutdown(fx.ExitCode(1))
 				}
 			}()
+
 			return nil
 		},
 		OnStop: server.Shutdown,

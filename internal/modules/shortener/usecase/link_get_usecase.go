@@ -38,10 +38,12 @@ func (uc *LinkGetUseCase) Execute(ctx context.Context, input LinkGetInput) (Link
 	if input.ID <= 0 {
 		return LinkGetOutput{}, errs.ErrInvalidInput
 	}
+
 	link, err := uc.linkRepository.FindByID(ctx, input.ID)
 	if err != nil {
 		return LinkGetOutput{}, err
 	}
+
 	return LinkGetOutput{
 		ID:          link.ID,
 		Code:        link.Code,

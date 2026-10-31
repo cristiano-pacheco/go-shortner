@@ -11,6 +11,7 @@ import (
 	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
 	"github.com/cristiano-pacheco/bricks/pkg/http/response"
 	"github.com/cristiano-pacheco/bricks/pkg/logger"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
@@ -50,12 +51,15 @@ func NewLinkHandler(
 
 func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 	const defaultPageSize = 20
+
 	input := usecase.LinkListInput{Page: 1, PageSize: defaultPageSize}
+
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		h.errorHandler.Error(w, errInvalidInput)
 		return
 	}
+
 	for _, param := range []struct {
 		name  string
 		value *int
@@ -65,22 +69,28 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 				h.errorHandler.Error(w, errInvalidInput)
 				return
 			}
+
 			value, parseErr := strconv.Atoi(values[0])
 			if parseErr != nil {
 				h.errorHandler.Error(w, errInvalidInput)
 				return
 			}
+
 			*param.value = value
 		}
 	}
+
 	output, err := h.linkListUseCase.Execute(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, errs.ErrInvalidInput) {
 			err = errInvalidInput
 		}
+
 		h.errorHandler.Error(w, err)
+
 		return
 	}
+
 	if err = response.JSON(w, http.StatusOK, mapper.ToLinkListResponse(output), nil); err != nil {
 		h.applicationLogger.Error("write link list response", logger.Error(err))
 	}
@@ -92,6 +102,7 @@ func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 		h.errorHandler.Error(w, errInvalidInput)
 		return
 	}
+
 	output, err := h.linkGetUseCase.Execute(r.Context(), usecase.LinkGetInput{ID: id})
 	if err != nil {
 		switch {
@@ -100,9 +111,12 @@ func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, errs.ErrLinkNotFound):
 			err = errLinkNotFound
 		}
+
 		h.errorHandler.Error(w, err)
+
 		return
 	}
+
 	if err = response.JSON(
 		w,
 		http.StatusOK,
@@ -128,10 +142,12 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.errorHandler.Error(w, err)
 		return
 	}
+
 	if request == nil {
 		h.errorHandler.Error(w, errInvalidInput)
 		return
 	}
+
 	output, err := h.linkCreateUseCase.Execute(
 		r.Context(),
 		usecase.LinkCreateInput{Destination: request.Destination, Alias: request.Alias, ExpiresAt: request.ExpiresAt},
@@ -143,9 +159,12 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, errs.ErrCodeConflict):
 			err = errCodeConflict
 		}
+
 		h.errorHandler.Error(w, err)
+
 		return
 	}
+
 	if err = response.JSON(
 		w,
 		http.StatusCreated,

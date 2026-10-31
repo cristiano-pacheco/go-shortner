@@ -13,5 +13,6 @@ func ToLinkListResponse(output usecase.LinkListOutput) dto.LinkListResponse {
 			Active: item.Active, ExpiresAt: item.ExpiresAt, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
 		})
 	}
+
 	return dto.LinkListResponse{Items: items, Page: output.Page, PageSize: output.PageSize, Total: output.Total}
 }

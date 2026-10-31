@@ -1,13 +1,14 @@
 package shortener
 
 import (
+	"go.uber.org/fx"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/handler"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/router"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
-	"go.uber.org/fx"
 )
 
 // Module owns link management and public resolution as they are implemented.

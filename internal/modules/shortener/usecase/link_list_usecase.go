@@ -47,10 +47,12 @@ func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (Li
 	if input.Page < 1 || input.PageSize < 1 || input.PageSize > 100 || input.Page-1 > math.MaxInt/input.PageSize {
 		return LinkListOutput{}, errs.ErrInvalidInput
 	}
+
 	links, total, err := uc.linkRepository.List(ctx, input.PageSize, (input.Page-1)*input.PageSize)
 	if err != nil {
 		return LinkListOutput{}, err
 	}
+
 	items := make([]LinkListItem, 0, len(links))
 	for _, link := range links {
 		items = append(items, LinkListItem{
@@ -59,5 +61,6 @@ func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (Li
 			ExpiresAt: link.ExpiresAt, CreatedAt: link.CreatedAt, UpdatedAt: link.UpdatedAt,
 		})
 	}
+
 	return LinkListOutput{Items: items, Page: input.Page, PageSize: input.PageSize, Total: total}, nil
 }

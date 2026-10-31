@@ -6,11 +6,12 @@ import (
 	"net/url"
 
 	bricksmigration "github.com/cristiano-pacheco/bricks/pkg/migration"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	sharedmigration "github.com/cristiano-pacheco/go-shortner/internal/shared/migration"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
 )
 
 func newMigrateCommand() *cobra.Command {
@@ -20,6 +21,7 @@ func newMigrateCommand() *cobra.Command {
 			if err := command.Context().Err(); err != nil {
 				return err
 			}
+
 			app := fx.New(fx.NopLogger, shortener.Module,
 				fx.Provide(config.Load, sharedmigration.NewRunner),
 				fx.Invoke(func(cfg config.Config, runner *bricksmigration.Runner) error {
@@ -38,9 +40,11 @@ func newMigrateCommand() *cobra.Command {
 						// Driver errors can include a DSN and its credentials.
 						return errors.New("database migration failed")
 					}
+
 					return nil
 				}),
 			)
+
 			return app.Err()
 		},
 	}
