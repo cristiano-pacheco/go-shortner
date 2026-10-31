@@ -28,12 +28,11 @@ Run commands from the repository root. Use the table to select a target, then ch
 - Use the Go version declared in `go.mod`. Race-enabled targets require CGO support and a C compiler.
 - The Makefile loads and exports `.env` when present. Check the selected environment before starting the server or applying migrations; `.env.example` and `config/` describe application configuration.
 - Install development tools with `make install-libs` when needed. Targets invoking tools by name require Go's binary directory on `PATH`; `lint` resolves its own executable path.
-- Integration tests require Docker. The integration targets expect their helper script to configure Docker/testcontainers; inspect that script before relying on socket detection or overrides.
+- Integration tests require Docker and Docker Compose. The helper script uses the Docker CLI configuration, and fixtures create and remove isolated service containers and volumes.
 
 ## Current limitations
 
 These describe the current checkout. Recheck the referenced files when working on these targets.
 
 - **E2E:** `test/e2e/` is absent. The recipe also sets `CGO_ENABLED=0` together with `-race`, which requires CGO. The target does not start a server.
-- **Nilaway:** the inclusion filter is `github.com/cristiano-pacheco/jbn`, while `go.mod` declares `github.com/cristiano-pacheco/go-shortner`. Treat its result as insufficient coverage of this module until the filter is corrected.
 - **Mocks:** no mockery configuration is present in the repository. Check generation configuration before using `update-mocks`.

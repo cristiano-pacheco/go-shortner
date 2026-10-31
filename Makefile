@@ -57,17 +57,8 @@ test:
 
 # ==============================================================================
 # Integration Tests
-# All integration test commands are delegated to scripts/integration-test.sh
-# which handles Docker socket detection and testcontainers configuration.
-#
-# The script auto-detects Docker (Colima or Docker Desktop) and sets up
-# all required environment variables for testcontainers.
-#
-# Override Docker configuration by setting environment variables:
-#   DOCKER_HOST=unix:///path/to/docker.sock make test-integration
-#   TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/path/to/docker.sock make test-integration
-#
-# For more information, run: ./scripts/integration-test.sh help
+# Integration test commands use scripts/integration-test.sh and the Docker CLI
+# configuration. For more information, run: ./scripts/integration-test.sh help
 # ==============================================================================
 
 .PHONY: test-integration

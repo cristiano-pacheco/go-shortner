@@ -2,10 +2,7 @@
 
 # ==============================================================================
 # Integration Test Script
-# Simplifies running integration tests with Docker/Testcontainers support
-#
-# Auto-detects Docker socket (Colima or Docker Desktop) and sets up the
-# necessary environment variables for testcontainers.
+# Runs integration tests using the Docker CLI configuration.
 #
 # Usage:
 #   ./scripts/integration-test.sh [command] [options]
@@ -18,7 +15,6 @@
 #
 # Environment Variables (optional overrides):
 #   DOCKER_HOST                     Override Docker socket location
-#   TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE  Override testcontainers socket
 #
 # ==============================================================================
 
@@ -30,10 +26,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-
-# Docker socket paths
-DOCKER_SOCKET_COLIMA="$HOME/.colima/docker.sock"
-DOCKER_SOCKET_DESKTOP="/var/run/docker.sock"
 
 # ==============================================================================
 # Helper Functions
@@ -62,47 +54,8 @@ print_info() {
 # ==============================================================================
 
 setup_docker_environment() {
-    local docker_host="$DOCKER_HOST"
-    local testcontainers_socket
-
-    # If DOCKER_HOST is not set, auto-detect
-    if [ -z "$docker_host" ]; then
-        if [ -S "$DOCKER_SOCKET_COLIMA" ]; then
-            # Colima socket found
-            docker_host="unix://$DOCKER_SOCKET_COLIMA"
-            testcontainers_socket="$DOCKER_SOCKET_COLIMA"
-            print_success "Using Colima Docker socket"
-        elif [ -S "$DOCKER_SOCKET_DESKTOP" ]; then
-            # Docker Desktop socket found
-            docker_host="unix://$DOCKER_SOCKET_DESKTOP"
-            testcontainers_socket="$DOCKER_SOCKET_DESKTOP"
-            print_success "Using Docker Desktop socket"
-        else
-            print_error "No Docker socket found at:"
-            print_info "  - $DOCKER_SOCKET_COLIMA"
-            print_info "  - $DOCKER_SOCKET_DESKTOP"
-            print_info ""
-            print_info "Please set DOCKER_HOST environment variable manually:"
-            print_info "  DOCKER_HOST=unix:///path/to/docker.sock $0 $1"
-            exit 1
-        fi
-    else
-        # DOCKER_HOST already set externally, extract socket path for testcontainers
-        testcontainers_socket="${docker_host#unix://}"
-        print_info "Using DOCKER_HOST from environment: $docker_host"
-    fi
-
-    # Allow override of testcontainers socket
-    local socket_override="${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE:-$testcontainers_socket}"
-
-    # Export environment variables
-    export DOCKER_HOST="$docker_host"
-    export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="$socket_override"
-    export TESTCONTAINERS_RYUK_DISABLED=true
-
-    print_info "Docker configuration:"
-    print_info "  DOCKER_HOST: $docker_host"
-    print_info "  TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: $socket_override"
+    print_info "Using Docker CLI configuration"
+    docker info >/dev/null
     echo ""
 }
 
@@ -148,20 +101,17 @@ run_coverage_tests() {
     echo ""
 
     # Run tests with p=1 to prevent parallel package execution
-    go test -count=1 -v -tags=integration -coverprofile=reports/integration-cover.out -timeout=10m -p=1 ./test/integration/... && \
+    go test -count=1 -v -tags=integration -coverpkg=./... -coverprofile=reports/integration-cover.out -timeout=10m -p=1 ./test/integration/...
     go tool cover -html=reports/integration-cover.out -o reports/integration-cover.html
-
-    if [ $? -eq 0 ]; then
-        print_success "Coverage report generated: reports/integration-cover.html"
-        print_info "Open the report in your browser to view detailed coverage information"
-    fi
+    print_success "Coverage report generated: reports/integration-cover.html"
+    print_info "Open the report in your browser to view detailed coverage information"
 }
 
 show_help() {
     cat << EOF
 $(print_header "Integration Test Script")
 
-Simplifies running integration tests with Docker/Testcontainers support.
+Runs integration tests using the Docker CLI configuration.
 
 Usage:
     $(basename "$0") [command]
@@ -176,11 +126,8 @@ Environment Variables (optional overrides):
     DOCKER_HOST                     Override Docker socket location
                                     Example: unix:///var/run/docker.sock
 
-    TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE  Override testcontainers socket
-                                    Example: /var/run/docker.sock
-
 Examples:
-    # Run all integration tests (auto-detects Docker)
+    # Run all integration tests
     $0 test
 
     # Run tests with race detector
