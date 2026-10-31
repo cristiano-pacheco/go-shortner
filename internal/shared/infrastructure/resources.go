@@ -15,6 +15,13 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+const (
+	maxOpenConnections  = 10
+	maxIdleConnections  = 5
+	postgresPingTimeout = 5 * time.Second
+	redisPingTimeout    = 3 * time.Second
+)
+
 type Resources struct {
 	DB    *gorm.DB
 	Redis *redis.Client
@@ -24,14 +31,26 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 	r := &Resources{}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			dsn := &url.URL{Scheme: "postgres", User: url.UserPassword(cfg.DatabaseUser, cfg.DatabasePassword), Host: net.JoinHostPort(cfg.DatabaseHost, cfg.DatabasePort), Path: "/" + cfg.DatabaseName}
+			dsn := &url.URL{
+				Scheme: "postgres",
+				User:   url.UserPassword(cfg.DatabaseUser, cfg.DatabasePassword),
+				Host:   net.JoinHostPort(cfg.DatabaseHost, cfg.DatabasePort),
+				Path:   "/" + cfg.DatabaseName,
+			}
 			q := dsn.Query()
 			q.Set("sslmode", cfg.DatabaseSSLMode)
 			q.Set("statement_timeout", "5000")
 			q.Set("connect_timeout", "3")
 			q.Set("TimeZone", "UTC")
 			dsn.RawQuery = q.Encode()
-			db, err := gorm.Open(postgres.Open(dsn.String()), &gorm.Config{DisableAutomaticPing: true, TranslateError: true, Logger: logger.Default.LogMode(logger.Silent)})
+			db, err := gorm.Open(
+				postgres.Open(dsn.String()),
+				&gorm.Config{
+					DisableAutomaticPing: true,
+					TranslateError:       true,
+					Logger:               logger.Default.LogMode(logger.Silent),
+				},
+			)
 			if err != nil {
 				return errors.New("cannot initialize PostgreSQL")
 			}
@@ -39,9 +58,9 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 			if err != nil {
 				return errors.New("cannot initialize PostgreSQL pool")
 			}
-			sqlDB.SetMaxOpenConns(10)
-			sqlDB.SetMaxIdleConns(5)
-			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			sqlDB.SetMaxOpenConns(maxOpenConnections)
+			sqlDB.SetMaxIdleConns(maxIdleConnections)
+			pingCtx, cancel := context.WithTimeout(ctx, postgresPingTimeout)
 			err = sqlDB.PingContext(pingCtx)
 			cancel()
 			if err != nil {
@@ -60,7 +79,7 @@ func NewResources(lc fx.Lifecycle, cfg config.Config) *Resources {
 			opts.MaxRetries = -1
 			opts.ContextTimeoutEnabled = true
 			client := redis.NewClient(opts)
-			pingCtx, cancel = context.WithTimeout(ctx, 3*time.Second)
+			pingCtx, cancel = context.WithTimeout(ctx, redisPingTimeout)
 			err = client.Ping(pingCtx).Err()
 			cancel()
 			if err != nil {

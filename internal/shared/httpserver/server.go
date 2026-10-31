@@ -13,6 +13,14 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	maxRequestBodyBytes = 1 << 20
+	readHeaderTimeout   = 5 * time.Second
+	readTimeout         = 15 * time.Second
+	writeTimeout        = 15 * time.Second
+	idleTimeout         = 60 * time.Second
+)
+
 // ManagementRoute registers paths relative to /api/v1.
 type ManagementRoute func(chi.Router)
 
@@ -34,7 +42,7 @@ func Register(params serverParams) {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 			next.ServeHTTP(w, r)
 		})
 	})
@@ -53,15 +61,21 @@ func Register(params serverParams) {
 			register(r)
 		}
 	})
-	server := &http.Server{Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{
+		Handler:           router,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
 	params.Lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			listener, err := net.Listen("tcp", params.Config.HTTPAddr)
+		OnStart: func(ctx context.Context) error {
+			listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", params.Config.HTTPAddr)
 			if err != nil {
 				return err
 			}
 			go func() {
-				if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 					_ = params.Shutdown.Shutdown(fx.ExitCode(1))
 				}
 			}()

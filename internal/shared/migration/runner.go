@@ -40,7 +40,7 @@ func NewRunner(params Params) (*bricksmigration.Runner, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid migration filename: %s", name)
 		}
-		if previous, ok := versions[version]; ok && previous != base {
+		if previous, exists := versions[version]; exists && previous != base {
 			return nil, fmt.Errorf("duplicate migration version: %s", version)
 		}
 		versions[version] = base

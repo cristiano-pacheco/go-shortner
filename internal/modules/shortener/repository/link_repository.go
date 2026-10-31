@@ -40,7 +40,11 @@ func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkMode
 }
 
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.LinkModel, error) {
-	link, err := gorm.G[model.LinkModel](r.resources.DB).Where("code = ? AND deleted_at IS NULL", code).Limit(1).First(ctx)
+	link, err := gorm.G[model.LinkModel](
+		r.resources.DB,
+	).Where("code = ? AND deleted_at IS NULL", code).
+		Limit(1).
+		First(ctx)
 	return r.found(link, err)
 }
 

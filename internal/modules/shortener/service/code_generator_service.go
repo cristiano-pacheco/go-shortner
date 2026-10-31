@@ -7,16 +7,21 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 )
 
-const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+const (
+	alphabet   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	codeLength = 8
+)
 
 type CodeGeneratorService struct{}
 
 var _ port.CodeGenerator = (*CodeGeneratorService)(nil)
 
-func NewCodeGeneratorService() *CodeGeneratorService { return &CodeGeneratorService{} }
+func NewCodeGeneratorService() *CodeGeneratorService {
+	return &CodeGeneratorService{}
+}
 
 func (g *CodeGeneratorService) Generate() (string, error) {
-	code := make([]byte, 8)
+	code := make([]byte, codeLength)
 	for i := range code {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
 		if err != nil {

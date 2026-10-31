@@ -38,13 +38,20 @@ type LinkCreateUseCase struct {
 	baseURL    string
 }
 
-func NewLinkCreateUseCase(repository port.LinkRepository, generator port.CodeGenerator, cfg config.Config) *LinkCreateUseCase {
-	return &LinkCreateUseCase{repository: repository, generator: generator, baseURL: strings.TrimRight(cfg.PublicBaseURL, "/")}
+func NewLinkCreateUseCase(
+	repository port.LinkRepository,
+	generator port.CodeGenerator,
+	cfg config.Config,
+) *LinkCreateUseCase {
+	return &LinkCreateUseCase{
+		repository: repository,
+		generator:  generator,
+		baseURL:    strings.TrimRight(cfg.PublicBaseURL, "/"),
+	}
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
-	u, err := url.Parse(input.Destination)
-	if len(input.Destination) > 4096 || err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+	if !uc.validDestination(input.Destination) {
 		return LinkCreateOutput{}, errs.ErrInvalidInput
 	}
 	if input.ExpiresAt != nil {
@@ -62,21 +69,40 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 		if input.Alias != nil {
 			code = *input.Alias
 		} else {
-			code, err = uc.generator.Generate()
-			if err != nil {
-				return LinkCreateOutput{}, err
+			var generateErr error
+			code, generateErr = uc.generator.Generate()
+			if generateErr != nil {
+				return LinkCreateOutput{}, generateErr
 			}
 		}
-		link, err := uc.repository.Create(ctx, model.LinkModel{Code: code, Destination: input.Destination, Active: true, ExpiresAt: input.ExpiresAt})
-		if err != nil {
-			if errors.Is(err, errs.ErrCodeConflict) && input.Alias == nil {
-				continue
-			}
-			return LinkCreateOutput{}, err
+		link, createErr := uc.repository.Create(
+			ctx,
+			model.LinkModel{Code: code, Destination: input.Destination, Active: true, ExpiresAt: input.ExpiresAt},
+		)
+		if errors.Is(createErr, errs.ErrCodeConflict) && input.Alias == nil {
+			continue
 		}
-		return LinkCreateOutput{ID: link.ID, Code: link.Code, Destination: link.Destination, ShortURL: uc.baseURL + "/" + link.Code, Active: link.Active, ExpiresAt: link.ExpiresAt, CreatedAt: link.CreatedAt, UpdatedAt: link.UpdatedAt}, nil
+		if createErr != nil {
+			return LinkCreateOutput{}, createErr
+		}
+		return LinkCreateOutput{
+			ID:          link.ID,
+			Code:        link.Code,
+			Destination: link.Destination,
+			ShortURL:    uc.baseURL + "/" + link.Code,
+			Active:      link.Active,
+			ExpiresAt:   link.ExpiresAt,
+			CreatedAt:   link.CreatedAt,
+			UpdatedAt:   link.UpdatedAt,
+		}, nil
 	}
 	return LinkCreateOutput{}, errors.New("automatic code generation exhausted retries")
+}
+
+func (uc *LinkCreateUseCase) validDestination(destination string) bool {
+	u, err := url.Parse(destination)
+	return len(destination) <= 4096 && err == nil && u != nil && (u.Scheme == "http" || u.Scheme == "https") &&
+		u.Hostname() != "" && u.User == nil
 }
 
 func (uc *LinkCreateUseCase) validAlias(alias string) bool {
@@ -84,7 +110,7 @@ func (uc *LinkCreateUseCase) validAlias(alias string) bool {
 		return false
 	}
 	for _, c := range alias {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+		if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", c) {
 			return false
 		}
 	}

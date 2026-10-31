@@ -10,7 +10,12 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 )
 
-var errUnauthenticated = brickserrs.New("unauthenticated", "API key is missing or invalid", http.StatusUnauthorized, nil)
+var errUnauthenticated = brickserrs.New(
+	"unauthenticated",
+	"API key is missing or invalid",
+	http.StatusUnauthorized,
+	nil,
+)
 
 // APIKeyMiddleware protects management routes with the configured global key.
 type APIKeyMiddleware struct {
@@ -24,7 +29,7 @@ func NewAPIKeyMiddleware(cfg config.Config, errors response.ErrorHandler) *APIKe
 
 func (m *APIKeyMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		keys := r.Header.Values("X-API-Key")
+		keys := r.Header.Values("X-Api-Key")
 		if len(keys) != 1 || keys[0] == "" {
 			m.errors.Error(w, errUnauthenticated)
 			return

@@ -20,20 +20,26 @@ func NewRootCommand() *cobra.Command {
 }
 
 func runServer(cmd *cobra.Command, _ []string) (runErr error) {
-	app := fx.New(fx.NopLogger, fx.Provide(config.Load, infrastructure.NewResources), shortener.Module, httpserver.Module)
+	const lifecycleTimeout = 10 * time.Second
+	app := fx.New(
+		fx.NopLogger,
+		fx.Provide(config.Load, infrastructure.NewResources),
+		shortener.Module,
+		httpserver.Module,
+	)
 	if err := app.Err(); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), lifecycleTimeout)
 	err := app.Start(ctx)
 	cancel()
 	if err != nil {
 		return err
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		runErr = errors.Join(runErr, app.Stop(ctx))
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), lifecycleTimeout)
+		defer stopCancel()
+		runErr = errors.Join(runErr, app.Stop(stopCtx))
 	}()
 	select {
 	case <-cmd.Context().Done():

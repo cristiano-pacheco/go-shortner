@@ -17,7 +17,12 @@ func ReadJSON(r *http.Request, dst any) error {
 	header := r.Header.Get("Content-Type")
 	contentType, _, _ := strings.Cut(header, ";")
 	if header != "" && strings.TrimSpace(contentType) != "application/json" {
-		return brickserrs.New("UNSUPPORTED_MEDIA_TYPE", "Content-Type header is not application/json", http.StatusUnsupportedMediaType, nil)
+		return brickserrs.New(
+			"UNSUPPORTED_MEDIA_TYPE",
+			"Content-Type header is not application/json",
+			http.StatusUnsupportedMediaType,
+			nil,
+		)
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -34,7 +39,12 @@ func ReadJSON(r *http.Request, dst any) error {
 func jsonRequestError(err error) error {
 	var maxBytes *http.MaxBytesError
 	if errors.As(err, &maxBytes) {
-		return brickserrs.New("REQUEST_ENTITY_TOO_LARGE", "Request body is too large", http.StatusRequestEntityTooLarge, nil)
+		return brickserrs.New(
+			"REQUEST_ENTITY_TOO_LARGE",
+			"Request body is too large",
+			http.StatusRequestEntityTooLarge,
+			nil,
+		)
 	}
 	return brickserrs.New("BAD_REQUEST", "Invalid JSON request body", http.StatusBadRequest, nil)
 }
