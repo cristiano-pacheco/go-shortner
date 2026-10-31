@@ -30,6 +30,7 @@ type LinkHandler struct {
 	linkGetUseCase    *usecase.LinkGetUseCase
 	linkListUseCase   *usecase.LinkListUseCase
 	linkUpdateUseCase *usecase.LinkUpdateUseCase
+	linkDeleteUseCase *usecase.LinkDeleteUseCase
 	errorHandler      response.ErrorHandler
 	applicationLogger logger.Logger
 }
@@ -39,6 +40,7 @@ func NewLinkHandler(
 	linkGetUseCase *usecase.LinkGetUseCase,
 	linkListUseCase *usecase.LinkListUseCase,
 	linkUpdateUseCase *usecase.LinkUpdateUseCase,
+	linkDeleteUseCase *usecase.LinkDeleteUseCase,
 	errorHandler response.ErrorHandler,
 	applicationLogger logger.Logger,
 ) *LinkHandler {
@@ -47,9 +49,34 @@ func NewLinkHandler(
 		linkGetUseCase:    linkGetUseCase,
 		linkListUseCase:   linkListUseCase,
 		linkUpdateUseCase: linkUpdateUseCase,
+		linkDeleteUseCase: linkDeleteUseCase,
 		errorHandler:      errorHandler,
 		applicationLogger: applicationLogger,
 	}
+}
+
+func (h *LinkHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		h.errorHandler.Error(w, errInvalidInput)
+		return
+	}
+
+	_, err = h.linkDeleteUseCase.Execute(r.Context(), usecase.LinkDeleteInput{ID: id})
+	if err != nil {
+		switch {
+		case errors.Is(err, errs.ErrInvalidInput):
+			err = errInvalidInput
+		case errors.Is(err, errs.ErrLinkNotFound):
+			err = errLinkNotFound
+		}
+
+		h.errorHandler.Error(w, err)
+
+		return
+	}
+
+	response.NoContent(w)
 }
 
 func (h *LinkHandler) Update(w http.ResponseWriter, r *http.Request) {
