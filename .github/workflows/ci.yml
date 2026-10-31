@@ -38,7 +38,7 @@ jobs:
           cache: true
       - run: make nilaway
 
-  build-and-integration:
+  build-and-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -56,5 +56,5 @@ jobs:
           fi
       - name: Build
         run: go build ./...
-      - name: Run integration tests
-        run: make test-integration
+      - name: Run end-to-end tests
+        run: make test-e2e

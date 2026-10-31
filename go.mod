@@ -8,6 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.12.1
 	go.uber.org/fx v1.24.0
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2

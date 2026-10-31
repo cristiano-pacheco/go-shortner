@@ -29,9 +29,6 @@ Os caminhos do módulo abaixo são relativos a [`internal/modules/shortener/`](i
 
 ## Evidências e procedimentos
 
-- Persistência: [`test/integration/modules/shortener/repository/`](test/integration/modules/shortener/repository/).
-- Criação HTTP: [`test/integration/modules/shortener/http/`](test/integration/modules/shortener/http/).
-- Listagem pela API: [`test/integration/modules/shortener/api/`](test/integration/modules/shortener/api/).
-- Inicialização e migrações: [`test/integration/bootstrap/`](test/integration/bootstrap/) e [`test/integration/migration/`](test/integration/migration/).
+- Fluxos HTTP ponta a ponta: [`test/e2e/modules/shortner/`](test/e2e/modules/shortner/).
 - Comandos e pré-requisitos: [guia de Make](docs/agents/make-commands.md).
 - Issues e triagem: [issue tracker](docs/agents/issue-tracker.md) e [labels](docs/agents/triage-labels.md).

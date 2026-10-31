@@ -55,9 +55,7 @@ test:
 	go test ./...
 
 # ==============================================================================
-# Integration Tests
-# Integration test commands use scripts/integration-test.sh and the Docker CLI
-# configuration. For more information, run: ./scripts/integration-test.sh help
+# Integration and end-to-end tests
 # ==============================================================================
 
 .PHONY: test-integration
@@ -74,7 +72,7 @@ test-integration-cover:
 
 .PHONY: test-e2e
 test-e2e:
-	APP_BASE_URL=http://localhost:9000 CGO_ENABLED=0 go test -v -race -timeout=30s -tags=e2e ./test/e2e/...
+	go test -count=1 -v -timeout=10m -tags=e2e ./test/e2e/...
 
 .PHONY: cover
 cover:
