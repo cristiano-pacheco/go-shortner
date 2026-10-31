@@ -65,7 +65,7 @@ func StartDependencies(t *testing.T) *Dependencies {
 func (d *Dependencies) compose(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	arguments := append([]string{"compose", "-f", filepath.Join(d.root, "docker-compose.yaml"), "-p", d.project}, args...)
+	arguments := append([]string{"compose", "-f", filepath.Join(d.root, "docker", "docker-compose.yaml"), "-p", d.project}, args...)
 	cmd := exec.CommandContext(ctx, "docker", arguments...)
 	cmd.Env = d.env
 	output, err := cmd.CombinedOutput()
