@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -10,6 +9,7 @@ import (
 
 	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
 	"github.com/cristiano-pacheco/bricks/pkg/http/response"
+	"github.com/cristiano-pacheco/bricks/pkg/logger"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
@@ -26,17 +26,20 @@ type LinkHandler struct {
 	linkCreateUseCase *usecase.LinkCreateUseCase
 	linkGetUseCase    *usecase.LinkGetUseCase
 	errorHandler      response.ErrorHandler
+	applicationLogger logger.Logger
 }
 
 func NewLinkHandler(
 	linkCreateUseCase *usecase.LinkCreateUseCase,
 	linkGetUseCase *usecase.LinkGetUseCase,
 	errorHandler response.ErrorHandler,
+	applicationLogger logger.Logger,
 ) *LinkHandler {
 	return &LinkHandler{
 		linkCreateUseCase: linkCreateUseCase,
 		linkGetUseCase:    linkGetUseCase,
 		errorHandler:      errorHandler,
+		applicationLogger: applicationLogger,
 	}
 }
 
@@ -72,8 +75,7 @@ func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 		},
 		nil,
 	); err != nil {
-		//nolint:sloglint // Preserve the process-wide default logger for response write failures.
-		slog.ErrorContext(r.Context(), "write link retrieval response", "error", err)
+		h.applicationLogger.Error("write link retrieval response", logger.Error(err))
 	}
 }
 
@@ -116,7 +118,6 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 		nil,
 	); err != nil {
-		//nolint:sloglint // Preserve the process-wide default logger for response write failures.
-		slog.ErrorContext(r.Context(), "write link creation response", "error", err)
+		h.applicationLogger.Error("write link creation response", logger.Error(err))
 	}
 }
