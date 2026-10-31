@@ -23,7 +23,7 @@ formatters:
       # with the given prefixes are grouped after 3rd-party packages.
       # Default: []
       local-prefixes:
-        - github.com/cristiano-pacheco/goflix
+        - github.com/cristiano-pacheco/go-shortner
 
     golines:
       # Target maximum line length.
