@@ -3,6 +3,7 @@ package shortener
 import (
 	"go.uber.org/fx"
 
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/cache"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/handler"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/router"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
@@ -15,6 +16,7 @@ import (
 // Module owns link management and public resolution as they are implemented.
 var Module = fx.Module("shortener", fx.Provide(
 	fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
+	fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),
 	fx.Annotate(service.NewCodeGeneratorService, fx.As(new(port.CodeGenerator))),
 	usecase.NewLinkCreateUseCase,
 	usecase.NewLinkDeleteUseCase,

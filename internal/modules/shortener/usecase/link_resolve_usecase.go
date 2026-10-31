@@ -8,6 +8,8 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 )
 
+const redirectSnapshotLifetime = 60 * time.Second
+
 type LinkResolveInput struct {
 	Code string
 }
@@ -18,10 +20,11 @@ type LinkResolveOutput struct {
 
 type LinkResolveUseCase struct {
 	linkRepository port.LinkRepository
+	redirectCache  port.RedirectCache
 }
 
-func NewLinkResolveUseCase(linkRepository port.LinkRepository) *LinkResolveUseCase {
-	return &LinkResolveUseCase{linkRepository: linkRepository}
+func NewLinkResolveUseCase(linkRepository port.LinkRepository, redirectCache port.RedirectCache) *LinkResolveUseCase {
+	return &LinkResolveUseCase{linkRepository: linkRepository, redirectCache: redirectCache}
 }
 
 func (uc *LinkResolveUseCase) Execute(ctx context.Context, input LinkResolveInput) (LinkResolveOutput, error) {
@@ -29,14 +32,62 @@ func (uc *LinkResolveUseCase) Execute(ctx context.Context, input LinkResolveInpu
 		return LinkResolveOutput{}, errs.ErrLinkNotFound
 	}
 
-	link, err := uc.linkRepository.FindByCode(ctx, input.Code)
+	if snapshot, ok := uc.cachedSnapshot(ctx, input.Code); ok {
+		return LinkResolveOutput{Destination: snapshot.Destination}, nil
+	}
+
+	for {
+		output, retry, err := uc.resolveFromDatabase(ctx, input.Code)
+		if !retry {
+			return output, err
+		}
+	}
+}
+
+func (uc *LinkResolveUseCase) cachedSnapshot(ctx context.Context, code string) (port.RedirectSnapshot, bool) {
+	snapshot, hit, err := uc.redirectCache.Get(ctx, code)
+
+	now := time.Now().UTC()
+	if err != nil || !hit || !snapshot.FreshUntil.After(now) || !snapshot.Active ||
+		snapshot.Destination == "" || (snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now)) {
+		return port.RedirectSnapshot{}, false
+	}
+
+	return snapshot, true
+}
+
+func (uc *LinkResolveUseCase) resolveFromDatabase(ctx context.Context, code string) (LinkResolveOutput, bool, error) {
+	// Start the lifetime before the database read, not after a potentially delayed fill.
+	freshUntil := time.Now().UTC().Add(redirectSnapshotLifetime)
+
+	link, err := uc.linkRepository.FindByCode(ctx, code)
 	if err != nil {
-		return LinkResolveOutput{}, err
+		return LinkResolveOutput{}, false, err
+	}
+
+	if !freshUntil.After(time.Now().UTC()) {
+		return LinkResolveOutput{}, ctx.Err() == nil, ctx.Err()
 	}
 
 	if !link.Active || (link.ExpiresAt != nil && !link.ExpiresAt.After(time.Now().UTC())) {
-		return LinkResolveOutput{}, errs.ErrLinkNotFound
+		return LinkResolveOutput{}, false, errs.ErrLinkNotFound
 	}
 
-	return LinkResolveOutput{Destination: link.Destination}, nil
+	_ = uc.redirectCache.Set(ctx, code, port.RedirectSnapshot{
+		Destination: link.Destination,
+		Active:      link.Active,
+		ExpiresAt:   link.ExpiresAt,
+		FreshUntil:  freshUntil,
+	})
+
+	now := time.Now().UTC()
+	if !freshUntil.After(now) {
+		return LinkResolveOutput{}, ctx.Err() == nil, ctx.Err()
+	}
+
+	if link.ExpiresAt != nil && !link.ExpiresAt.After(now) {
+		return LinkResolveOutput{}, false, errs.ErrLinkNotFound
+	}
+
+	return LinkResolveOutput{Destination: link.Destination}, false, nil
 }

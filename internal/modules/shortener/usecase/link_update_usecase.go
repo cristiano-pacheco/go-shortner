@@ -32,17 +32,20 @@ type LinkUpdateOutput struct {
 
 type LinkUpdateUseCase struct {
 	linkRepository       port.LinkRepository
+	redirectCache        port.RedirectCache
 	destinationValidator port.DestinationValidator
 	baseURL              string
 }
 
 func NewLinkUpdateUseCase(
 	linkRepository port.LinkRepository,
+	redirectCache port.RedirectCache,
 	destinationValidator port.DestinationValidator,
 	cfg config.Config,
 ) *LinkUpdateUseCase {
 	return &LinkUpdateUseCase{
 		linkRepository:       linkRepository,
+		redirectCache:        redirectCache,
 		destinationValidator: destinationValidator,
 		baseURL:              strings.TrimRight(cfg.PublicBaseURL, "/"),
 	}
@@ -81,6 +84,8 @@ func (uc *LinkUpdateUseCase) Execute(ctx context.Context, input LinkUpdateInput)
 	if err != nil {
 		return LinkUpdateOutput{}, err
 	}
+
+	_ = uc.redirectCache.Delete(ctx, link.Code)
 
 	return LinkUpdateOutput{
 		ID:          link.ID,
