@@ -98,6 +98,42 @@ func TestCreateLinkHTTP(t *testing.T) {
 		return resp.StatusCode, result
 	}
 	key := "integration-only-key"
+	for _, tc := range []struct {
+		name, body, contentType, code string
+		status                        int
+	}{
+		{"non-JSON media", `{}`, "text/plain", "UNSUPPORTED_MEDIA_TYPE", 415},
+		{"unknown field", `{"destination":"https://example.com","unknown":true}`, "application/json", "BAD_REQUEST", 400},
+		{"trailing value", `{"destination":"https://example.com"} {}`, "application/json", "BAD_REQUEST", 400},
+		{"trailing delimiter", `{"destination":"https://example.com"} ]`, "application/json", "BAD_REQUEST", 400},
+		{"oversized value", `{"destination":"https://example.com/` + strings.Repeat("a", 1<<20) + `"}`, "application/json", "REQUEST_ENTITY_TOO_LARGE", 413},
+		{"oversized trailing whitespace", `{"destination":"https://example.com"}` + strings.Repeat(" ", 1<<20), "application/json", "REQUEST_ENTITY_TOO_LARGE", 413},
+	} {
+		t.Run("request "+tc.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodPost, "http://"+address+"/api/v1/links", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", tc.contentType)
+			req.Header.Set("X-API-Key", key)
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var result struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tc.status || result.Error.Code != tc.code {
+				t.Fatalf("got status %d code %q, want %d %q", resp.StatusCode, result.Error.Code, tc.status, tc.code)
+			}
+		})
+	}
 	for _, auth := range []string{"", "wrong"} {
 		if status, _ := post(map[string]any{"destination": "https://example.com"}, auth); status != 401 {
 			t.Errorf("authentication %q: got %d", auth, status)

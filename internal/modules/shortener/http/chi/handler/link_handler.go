@@ -1,9 +1,8 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
+	"log/slog"
 	"net/http"
 
 	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
@@ -11,6 +10,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
 )
 
 var (
@@ -28,15 +28,12 @@ func NewLinkHandler(create *usecase.LinkCreateUseCase, errors response.ErrorHand
 }
 
 func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var request dto.LinkCreateRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		h.errors.Error(w, invalidInput)
+	var request *dto.LinkCreateRequest
+	if err := httpserver.ReadJSON(r, &request); err != nil {
+		h.errors.Error(w, err)
 		return
 	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	if request == nil {
 		h.errors.Error(w, invalidInput)
 		return
 	}
@@ -51,5 +48,7 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.errors.Error(w, err)
 		return
 	}
-	_ = response.JSON(w, http.StatusCreated, dto.LinkResponse{ID: output.ID, Code: output.Code, Destination: output.Destination, ShortURL: output.ShortURL, Active: output.Active, ExpiresAt: output.ExpiresAt, CreatedAt: output.CreatedAt, UpdatedAt: output.UpdatedAt}, nil)
+	if err := response.JSON(w, http.StatusCreated, dto.LinkResponse{ID: output.ID, Code: output.Code, Destination: output.Destination, ShortURL: output.ShortURL, Active: output.Active, ExpiresAt: output.ExpiresAt, CreatedAt: output.CreatedAt, UpdatedAt: output.UpdatedAt}, nil); err != nil {
+		slog.Error("write link creation response", "error", err)
+	}
 }
