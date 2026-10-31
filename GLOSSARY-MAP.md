@@ -1,34 +1,25 @@
 # Glossary map
 
-Mapa do [vocabulário](GLOSSARY.md) para suas fontes no código. Use a linha correspondente à tarefa; as definições ficam no glossário e as regras executáveis nas fontes vinculadas.
+The [glossary](GLOSSARY.md) defines these terms. Use the links below to find their implementation.
 
-Os caminhos do módulo abaixo são relativos a [`internal/modules/shortener/`](internal/modules/shortener/).
+## Domain and operations
 
-## Domínio e operações
-
-| Conceito ou tarefa | Fontes a consultar |
+| Concept or task | Sources |
 | --- | --- |
-| Link, ID, código, destino e estado | [`model/link_model.go`](internal/modules/shortener/model/link_model.go) (`LinkModel`); [`migration/20261030000100_create_links.up.sql`](internal/modules/shortener/migration/20261030000100_create_links.up.sql) para restrições e índices. |
-| Criar link, validar alias e expiração, tratar colisões | [`usecase/link_create_usecase.go`](internal/modules/shortener/usecase/link_create_usecase.go) (`LinkCreateUseCase`). |
-| Gerar código automático | [`port/code_generator.go`](internal/modules/shortener/port/code_generator.go) para o contrato; [`service/code_generator_service.go`](internal/modules/shortener/service/code_generator_service.go) para a implementação. |
-| Consultar link por ID | [`usecase/link_get_usecase.go`](internal/modules/shortener/usecase/link_get_usecase.go) (`LinkGetUseCase`). |
-| Listar links e paginar | [`usecase/link_list_usecase.go`](internal/modules/shortener/usecase/link_list_usecase.go) para limites e saída; [`repository/link_repository.go`](internal/modules/shortener/repository/link_repository.go) (`List`) para filtro, ordenação e contagem. |
-| Compor URL curta | Casos de uso de [criação](internal/modules/shortener/usecase/link_create_usecase.go), [consulta](internal/modules/shortener/usecase/link_get_usecase.go) e [listagem](internal/modules/shortener/usecase/link_list_usecase.go); [`Config.PublicBaseURL`](internal/shared/config/config.go). |
-| Persistir, atualizar ou excluir logicamente | [`port/link_repository.go`](internal/modules/shortener/port/link_repository.go) para o contrato; [`repository/link_repository.go`](internal/modules/shortener/repository/link_repository.go) para filtros e mutações; [`model/link_model.go`](internal/modules/shortener/model/link_model.go) (`LinkChanges`) para alterações parciais. |
-| Identificar erros de domínio | [`errs/shortener_error.go`](internal/modules/shortener/errs/shortener_error.go); [`http/chi/handler/link_handler.go`](internal/modules/shortener/http/chi/handler/link_handler.go) para tradução em respostas HTTP. |
+| Link, ID, code, destination and lifecycle | [`LinkModel`](internal/modules/shortener/model/link_model.go), [schema and constraints](internal/modules/shortener/migration/20261030000100_create_links.up.sql). |
+| Create links, validate aliases and expiration, handle collisions | [`LinkCreateUseCase`](internal/modules/shortener/usecase/link_create_usecase.go). |
+| Generate codes | [Generator port](internal/modules/shortener/port/code_generator.go), [generator implementation](internal/modules/shortener/service/code_generator_service.go). |
+| Retrieve and list links | [Get use case](internal/modules/shortener/usecase/link_get_usecase.go), [list use case](internal/modules/shortener/usecase/link_list_usecase.go), [repository](internal/modules/shortener/repository/link_repository.go). |
+| Update and delete links | [Update use case](internal/modules/shortener/usecase/link_update_usecase.go), [delete use case](internal/modules/shortener/usecase/link_delete_usecase.go), [repository](internal/modules/shortener/repository/link_repository.go). |
+| Resolve and cache redirects | [Resolve use case](internal/modules/shortener/usecase/link_resolve_usecase.go), [Redis adapter](internal/modules/shortener/cache/redirect_cache.go). |
+| Domain errors | [Shortener errors](internal/modules/shortener/errs/shortener_error.go), [HTTP handler](internal/modules/shortener/http/chi/handler/link_handler.go). |
 
-## Transporte e composição
+## Transport and composition
 
-| Conceito ou tarefa | Fontes a consultar |
+| Concept or task | Sources |
 | --- | --- |
-| Localizar operações HTTP implementadas | [`http/chi/router/link_router.go`](internal/modules/shortener/http/chi/router/link_router.go) para rotas do módulo; [`internal/shared/httpserver/server.go`](internal/shared/httpserver/server.go) para prefixos e rotas públicas. |
-| Ler contrato JSON e parâmetros de consulta | [`http/dto/link_dto.go`](internal/modules/shortener/http/dto/link_dto.go) e [`http/chi/handler/link_handler.go`](internal/modules/shortener/http/chi/handler/link_handler.go). |
-| Autenticar API de gestão | [`internal/shared/httpserver/api_key_middleware.go`](internal/shared/httpserver/api_key_middleware.go) (`APIKeyMiddleware`). |
-| Configurar base pública e endereço de escuta | [`internal/shared/config/config.go`](internal/shared/config/config.go) (`Config`, `Load`). |
-| Rastrear composição e recursos compartilhados | [`fx.go`](internal/modules/shortener/fx.go) no módulo; [`cmd/root.go`](cmd/root.go) no bootstrap; [`internal/shared/infrastructure/resources.go`](internal/shared/infrastructure/resources.go) para recursos externos. |
-
-## Evidências e procedimentos
-
-- Fluxos HTTP ponta a ponta: [`test/e2e/modules/shortner/`](test/e2e/modules/shortner/).
-- Comandos e pré-requisitos: [guia de Make](docs/agents/make-commands.md).
-- Issues e triagem: [issue tracker](docs/agents/issue-tracker.md) e [labels](docs/agents/triage-labels.md).
+| HTTP routes and request contracts | [Router](internal/modules/shortener/http/chi/router/link_router.go), [server](internal/shared/httpserver/server.go), [DTOs](internal/modules/shortener/http/dto/link_dto.go). |
+| Management authentication | [API key middleware](internal/shared/httpserver/api_key_middleware.go). |
+| Configuration and public base URL | [Configuration](internal/shared/config/config.go). |
+| Module composition and shared resources | [Shortener Fx module](internal/modules/shortener/fx.go), [command bootstrap](cmd/root.go), [infrastructure resources](internal/shared/infrastructure/resources.go). |
+| HTTP verification | [End-to-end tests](test/e2e/modules/shortner/), [Make commands](docs/agents/make-commands.md). |
