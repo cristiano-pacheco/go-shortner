@@ -4,8 +4,8 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/handler"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/router"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/provider"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	"go.uber.org/fx"
 )
@@ -13,7 +13,7 @@ import (
 // Module owns link management and public resolution as they are implemented.
 var Module = fx.Module("shortener", fx.Provide(
 	fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
-	fx.Annotate(provider.NewCodeGeneratorProvider, fx.As(new(port.CodeGenerator))),
+	fx.Annotate(service.NewCodeGeneratorService, fx.As(new(port.CodeGenerator))),
 	usecase.NewLinkCreateUseCase,
 	handler.NewLinkHandler,
 	router.NewLinkRouter,
