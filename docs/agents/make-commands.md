@@ -34,7 +34,6 @@ Run commands from the repository root. Use the table to select a target, then ch
 
 These describe the current checkout. Recheck the referenced files when working on these targets.
 
-- **Integration:** `scripts/integration-test.sh` is absent, so all three `test-integration*` targets fail before running tests. Tests exist under `test/integration/` with the `integration` build tag.
 - **E2E:** `test/e2e/` is absent. The recipe also sets `CGO_ENABLED=0` together with `-race`, which requires CGO. The target does not start a server.
 - **Nilaway:** the inclusion filter is `github.com/cristiano-pacheco/jbn`, while `go.mod` declares `github.com/cristiano-pacheco/go-shortner`. Treat its result as insufficient coverage of this module until the filter is corrected.
 - **Mocks:** no mockery configuration is present in the repository. Check generation configuration before using `update-mocks`.
