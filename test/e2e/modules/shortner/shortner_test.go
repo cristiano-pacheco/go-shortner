@@ -34,9 +34,10 @@ type link struct {
 }
 
 type httpSuite struct {
-	base   string
-	client *http.Client
-	run    func(...string) ([]byte, error)
+	base        string
+	metricsBase string
+	client      *http.Client
+	run         func(...string) ([]byte, error)
 }
 
 func start(t *testing.T) httpSuite {
@@ -58,6 +59,7 @@ func start(t *testing.T) httpSuite {
 		"API_KEY="+apiKey,
 		"PUBLIC_BASE_URL="+publicBase,
 		"APP_PORT=0",
+		"METRICS_PORT=0",
 		"POSTGRES_PORT=0",
 		"REDIS_PORT=0",
 	)
@@ -93,23 +95,18 @@ func start(t *testing.T) httpSuite {
 		}
 	}
 
-	out, err := run("port", "app", "8080")
-	if err != nil {
-		t.Fatalf("compose port: %v\n%s", err, out)
-	}
-
-	base := "http://" + strings.TrimSpace(string(out))
 	s := httpSuite{
-		base,
-		&http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}},
-		run,
+		run: run,
 	}
+	s.base = s.composeAddress(t, "8080")
+	s.metricsBase = s.composeAddress(t, "9090")
 
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := s.client.Get(base + "/health")
+		resp, err := s.client.Get(s.base + "/health")
 		if err == nil {
 			resp.Body.Close()
 
@@ -125,6 +122,17 @@ func start(t *testing.T) httpSuite {
 	t.Fatalf("application did not become healthy:\n%s", logs)
 
 	return httpSuite{}
+}
+
+func (s httpSuite) composeAddress(t *testing.T, port string) string {
+	t.Helper()
+
+	out, err := s.run("port", "app", port)
+	if err != nil {
+		t.Fatalf("compose port %s: %v\n%s", port, err, out)
+	}
+
+	return "http://" + strings.TrimSpace(string(out))
 }
 
 func (s httpSuite) request(t *testing.T, method, path, body, key, contentType string) (int, http.Header, []byte) {

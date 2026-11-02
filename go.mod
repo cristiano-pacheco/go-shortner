@@ -5,6 +5,8 @@ go 1.27.3
 require (
 	github.com/cristiano-pacheco/bricks v0.2.0
 	github.com/go-chi/chi/v5 v5.5.0
+	github.com/go-playground/validator/v10 v10.30.5
+	github.com/prometheus/client_golang v1.25.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
@@ -17,6 +19,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -35,7 +38,6 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
-	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.20.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -65,9 +67,14 @@ require (
 	github.com/moby/sys/user v0.5.0 // indirect
 	github.com/moby/sys/userns v0.2.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
+	github.com/prometheus/client_model v0.6.3 // indirect
+	github.com/prometheus/common v0.73.1 // indirect
+	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.10 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
@@ -90,4 +97,5 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
