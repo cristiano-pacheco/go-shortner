@@ -23,12 +23,14 @@ func (s *UpdateLinkSuite) fixture() []persistedLink {
 	s.sql(`INSERT INTO links (id, code, destination, active, expires_at, created_at, updated_at) VALUES
  (1, 'update-e2e', 'https://example.com/original', true, '2099-01-01 00:00:00+00', '2021-01-01 00:00:00+00', '2021-01-01 00:00:00+00'),
  (2, 'other-e2e', 'https://example.com/other', true, NULL, '2021-01-01 00:00:00+00', '2021-01-01 00:00:00+00')`)
+
 	return s.persistedLinks()
 }
 
 func (s *UpdateLinkSuite) patch(body string) link {
 	s.T().Helper()
 	_, raw := s.http.expect(s.T(), http.MethodPatch, "/api/v1/links/1", body, apiKey, "application/json", http.StatusOK)
+
 	return decodeLink(s.T(), raw)
 }
 
@@ -114,7 +116,9 @@ func (s *UpdateLinkSuite) TestExpirationCanBeChanged() {
 	updated := s.patch(`{"expires_at":"2098-01-01T00:00:00Z"}`)
 	after := s.persistedLinks()
 	s.Require().Len(after, 2)
+
 	expected := time.Date(2098, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	s.Require().NotNil(updated.ExpiresAt)
 	s.True(updated.ExpiresAt.Equal(expected))
 	s.Require().NotNil(after[0].ExpiresAt)
@@ -199,6 +203,14 @@ func (s *UpdateLinkSuite) TestDeletedLinkCannotBeUpdated() {
 	s.fixture()
 	s.sql(`UPDATE links SET deleted_at = '2022-01-01 00:00:00+00' WHERE id = 1`)
 	before := s.persistedLinks()
-	s.http.expect(s.T(), http.MethodPatch, "/api/v1/links/1", `{"active":false}`, apiKey, "application/json", http.StatusNotFound)
+	s.http.expect(
+		s.T(),
+		http.MethodPatch,
+		"/api/v1/links/1",
+		`{"active":false}`,
+		apiKey,
+		"application/json",
+		http.StatusNotFound,
+	)
 	s.Equal(before, s.persistedLinks())
 }

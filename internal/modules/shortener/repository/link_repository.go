@@ -11,22 +11,22 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/infrastructure"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 )
 
-type LinkRepository struct{ resources *infrastructure.Resources }
+type LinkRepository struct{ database *database.Database }
 
 var _ port.LinkRepository = (*LinkRepository)(nil)
 
-func NewLinkRepository(resources *infrastructure.Resources) *LinkRepository {
-	return &LinkRepository{resources: resources}
+func NewLinkRepository(database *database.Database) *LinkRepository {
+	return &LinkRepository{database: database}
 }
 
 func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (model.LinkModel, error) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	link.ID, link.CreatedAt, link.UpdatedAt, link.DeletedAt = 0, now, now, nil
 
-	err := gorm.G[model.LinkModel](r.resources.DB).Create(ctx, &link)
+	err := gorm.G[model.LinkModel](r.database.DB).Create(ctx, &link)
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return model.LinkModel{}, errs.ErrCodeConflict
 	}
@@ -39,13 +39,13 @@ func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (mode
 }
 
 func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkModel, error) {
-	link, err := gorm.G[model.LinkModel](r.resources.DB).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
+	link, err := gorm.G[model.LinkModel](r.database.DB).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
 	return r.found(link, err)
 }
 
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.LinkModel, error) {
 	link, err := gorm.G[model.LinkModel](
-		r.resources.DB,
+		r.database.DB,
 	).Where("code = ? AND deleted_at IS NULL", code).
 		Limit(1).
 		First(ctx)
@@ -54,7 +54,7 @@ func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.Lin
 }
 
 func (r *LinkRepository) List(ctx context.Context, limit, offset int) ([]model.LinkModel, int64, error) {
-	db := r.resources.DB.WithContext(ctx).Model(&model.LinkModel{}).Where("deleted_at IS NULL")
+	db := r.database.WithContext(ctx).Model(&model.LinkModel{}).Where("deleted_at IS NULL")
 
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -95,7 +95,7 @@ func (r *LinkRepository) Delete(ctx context.Context, id int64) (model.LinkModel,
 func (r *LinkRepository) mutate(ctx context.Context, id int64, values map[string]any) (model.LinkModel, error) {
 	var link model.LinkModel
 
-	result := r.resources.DB.WithContext(ctx).Model(&link).Clauses(clause.Returning{}).
+	result := r.database.WithContext(ctx).Model(&link).Clauses(clause.Returning{}).
 		Where("id = ? AND deleted_at IS NULL", id).Updates(values)
 	if result.Error != nil {
 		return model.LinkModel{}, result.Error

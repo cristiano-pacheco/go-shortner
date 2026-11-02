@@ -10,8 +10,9 @@ import (
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/infrastructure"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 func NewRootCommand() *cobra.Command {
@@ -26,7 +27,9 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 
 	app := fx.New(
 		fx.NopLogger,
-		fx.Provide(config.Load, infrastructure.NewResources),
+		fx.Provide(config.Load),
+		database.Module,
+		redis.Module,
 		shortener.Module,
 		httpserver.Module,
 	)

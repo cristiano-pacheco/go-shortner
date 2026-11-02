@@ -5,7 +5,6 @@ package shortner_test
 import (
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -26,10 +25,28 @@ type persistedLink struct {
 
 func (s *endpointSuite) persistedLinks() []persistedLink {
 	s.T().Helper()
-	out, err := s.http.run("exec", "-T", "postgres", "psql", "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-U", "shortener", "-d", "shortener", "-c", `SELECT COALESCE(json_agg(row_to_json(l) ORDER BY id), '[]'::json) FROM links l`)
+	out, err := s.http.run(
+		"exec",
+		"-T",
+		"postgres",
+		"psql",
+		"-X",
+		"-A",
+		"-t",
+		"-v",
+		"ON_ERROR_STOP=1",
+		"-U",
+		"shortener",
+		"-d",
+		"shortener",
+		"-c",
+		`SELECT COALESCE(json_agg(row_to_json(l) ORDER BY id), '[]'::json) FROM links l`,
+	)
 	s.Require().NoError(err, "read persisted links: %s", out)
+
 	var links []persistedLink
 	s.Require().NoError(json.Unmarshal(out, &links), "database response: %s", out)
+
 	return links
 }
 
@@ -42,9 +59,17 @@ func TestCreateLinkSuite(t *testing.T) {
 }
 
 func (s *CreateLinkSuite) TestGeneratedCodeIsPersisted() {
-	_, body := s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/path"}`, apiKey, "application/json", http.StatusCreated)
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{"destination":"https://example.com/path"}`,
+		apiKey,
+		"application/json",
+		http.StatusCreated,
+	)
 	item := decodeLink(s.T(), body)
-	s.Regexp(regexp.MustCompile(`^[A-Za-z0-9]{8}$`), item.Code)
+	s.Regexp(`^[A-Za-z0-9]{8}$`, item.Code)
 	s.Positive(item.ID)
 	s.Equal("https://example.com/path", item.Destination)
 	s.Equal(publicBase+"/"+item.Code, item.ShortURL)
@@ -66,12 +91,22 @@ func (s *CreateLinkSuite) TestGeneratedCodeIsPersisted() {
 }
 
 func (s *CreateLinkSuite) TestAliasAndExpirationArePersisted() {
-	_, body := s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/a?x=1&y=two","alias":"Case_123","expires_at":"2099-01-01T00:00:00Z"}`, apiKey, "application/json", http.StatusCreated)
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{"destination":"https://example.com/a?x=1&y=two","alias":"Case_123","expires_at":"2099-01-01T00:00:00Z"}`,
+		apiKey,
+		"application/json",
+		http.StatusCreated,
+	)
 	item := decodeLink(s.T(), body)
 	s.Equal("Case_123", item.Code)
 	s.Equal("https://example.com/a?x=1&y=two", item.Destination)
 	s.Equal(publicBase+"/Case_123", item.ShortURL)
+
 	expires := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	s.Require().NotNil(item.ExpiresAt)
 	s.True(expires.Equal(*item.ExpiresAt))
 	rows := s.persistedLinks()
@@ -118,7 +153,12 @@ func (s *CreateLinkSuite) TestRejectsTrailingJSON() {
 }
 
 func (s *CreateLinkSuite) TestRejectsOversizedBody() {
-	s.rejectedCreate(`{"destination":"https://example.com/`+strings.Repeat("a", 1<<20)+`"}`, apiKey, "application/json", 413)
+	s.rejectedCreate(
+		`{"destination":"https://example.com/`+strings.Repeat("a", 1<<20)+`"}`,
+		apiKey,
+		"application/json",
+		413,
+	)
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingDestination() {
@@ -146,7 +186,12 @@ func (s *CreateLinkSuite) TestRejectsShortAlias() {
 }
 
 func (s *CreateLinkSuite) TestRejectsLongAlias() {
-	s.rejectedCreate(`{"destination":"https://example.com","alias":"`+strings.Repeat("a", 33)+`"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(
+		`{"destination":"https://example.com","alias":"`+strings.Repeat("a", 33)+`"}`,
+		apiKey,
+		"application/json",
+		400,
+	)
 }
 
 func (s *CreateLinkSuite) TestRejectsInvalidAlias() {
@@ -158,13 +203,26 @@ func (s *CreateLinkSuite) TestRejectsReservedAlias() {
 }
 
 func (s *CreateLinkSuite) TestRejectsExpiredLink() {
-	s.rejectedCreate(`{"destination":"https://example.com","expires_at":"2020-01-01T00:00:00Z"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(
+		`{"destination":"https://example.com","expires_at":"2020-01-01T00:00:00Z"}`,
+		apiKey,
+		"application/json",
+		400,
+	)
 }
 
 func (s *CreateLinkSuite) TestDuplicateAliasDoesNotChangeExistingRow() {
 	s.create("duplicate-e2e")
 	before := s.persistedLinks()
 	s.Require().Len(before, 1)
-	s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{"destination":"https://other.example","alias":"duplicate-e2e"}`, apiKey, "application/json", http.StatusConflict)
+	s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{"destination":"https://other.example","alias":"duplicate-e2e"}`,
+		apiKey,
+		"application/json",
+		http.StatusConflict,
+	)
 	s.Equal(before, s.persistedLinks())
 }

@@ -22,6 +22,7 @@ func (s *DeleteLinkSuite) fixture() []persistedLink {
 	s.sql(`INSERT INTO links (id, code, destination, active, expires_at, created_at, updated_at) VALUES
  (1, 'delete-e2e', 'https://example.com/path', true, '2099-01-01 00:00:00+00', '2021-01-01 00:00:00+00', '2021-01-01 00:00:00+00'),
  (2, 'other-e2e', 'https://example.com/other', true, NULL, '2021-01-01 00:00:00+00', '2021-01-01 00:00:00+00')`)
+
 	return s.persistedLinks()
 }
 
@@ -58,7 +59,15 @@ func (s *DeleteLinkSuite) TestDeletedAliasRemainsReserved() {
 	s.fixture()
 	s.http.expect(s.T(), http.MethodDelete, "/api/v1/links/1", "", apiKey, "", http.StatusNoContent)
 	before := s.persistedLinks()
-	s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{"destination":"https://example.com","alias":"delete-e2e"}`, apiKey, "application/json", http.StatusConflict)
+	s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{"destination":"https://example.com","alias":"delete-e2e"}`,
+		apiKey,
+		"application/json",
+		http.StatusConflict,
+	)
 	s.Equal(before, s.persistedLinks())
 }
 
