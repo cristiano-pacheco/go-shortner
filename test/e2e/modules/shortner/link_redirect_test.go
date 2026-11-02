@@ -222,8 +222,10 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 	item := s.create("drain-inflight")
 	s.http.expect(s.T(), http.MethodGet, "/drain-inflight", "", "", "", http.StatusFound)
+
 	cacheKey := "shortener:redirect:v1:drain-inflight"
 	s.Require().Equal("1", s.redis("EXISTS", cacheKey))
+
 	lockDone := make(chan error, 1)
 
 	go func() {

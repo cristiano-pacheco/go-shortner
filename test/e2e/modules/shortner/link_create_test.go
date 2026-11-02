@@ -162,7 +162,16 @@ func (s *CreateLinkSuite) TestRejectsOversizedBody() {
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingDestination() {
-	_, body := s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{}`, apiKey, "application/json", http.StatusBadRequest)
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{}`,
+		apiKey,
+		"application/json",
+		http.StatusBadRequest,
+	)
+
 	var response struct {
 		Error struct {
 			Code string `json:"code"`

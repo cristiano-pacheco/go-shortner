@@ -162,7 +162,16 @@ func (s *UpdateLinkSuite) TestUnknownFieldLeavesDatabaseUnchanged() {
 
 func (s *UpdateLinkSuite) TestInvalidDestinationLeavesDatabaseUnchanged() {
 	before := s.fixture()
-	_, body := s.http.expect(s.T(), http.MethodPatch, "/api/v1/links/1", `{"destination":"ftp://example.com","active":false}`, apiKey, "application/json", http.StatusBadRequest)
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPatch,
+		"/api/v1/links/1",
+		`{"destination":"ftp://example.com","active":false}`,
+		apiKey,
+		"application/json",
+		http.StatusBadRequest,
+	)
+
 	var response struct {
 		Error struct {
 			Code string `json:"code"`
