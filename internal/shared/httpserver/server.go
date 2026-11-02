@@ -34,6 +34,7 @@ type serverParams struct {
 	Shutdown         fx.Shutdowner
 	Config           config.Config
 	Authentication   *APIKeyMiddleware
+	Metrics          *MetricsMiddleware
 	ManagementRoutes []ManagementRoute `group:"management_routes"`
 	PublicRoutes     []PublicRoute     `group:"public_routes"`
 }
@@ -63,7 +64,7 @@ func Register(params serverParams) {
 		}
 	})
 	server := &http.Server{
-		Handler:           router,
+		Handler:           params.Metrics.Wrap(router),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

@@ -4,13 +4,18 @@ package shortner_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,4 +96,133 @@ func TestAdministrativeMetrics(t *testing.T) {
 	require.NoError(t, err, "%s", out)
 	_, err = stack.client.Get(stack.metricsBase + "/metrics")
 	require.Error(t, err, "stopped listener must reject requests")
+}
+
+//nolint:paralleltest // Each test owns an isolated Compose application.
+func TestHTTPMetrics(t *testing.T) {
+	stack := start(t)
+
+	type requestCase struct {
+		method, path, body, key, media string
+		route, metricMethod, outcome   string
+		status                         int
+	}
+	cases := []requestCase{
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"metric-alpha"}`, apiKey, "application/json", "/api/v1/links", "POST", "success", 201},
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"metric-bravo"}`, apiKey, "application/json", "/api/v1/links", "POST", "success", 201},
+		{http.MethodGet, "/metric-alpha", "", "", "", "/{code}", "GET", "success", 302},
+		{http.MethodGet, "/metric-bravo", "", "", "", "/{code}", "GET", "success", 302},
+		{http.MethodHead, "/metric-alpha", "", "", "", "/{code}", "HEAD", "success", 302},
+		{http.MethodGet, "/api/v1/links/1", "", apiKey, "", "/api/v1/links/{id}", "GET", "success", 200},
+		{http.MethodGet, "/api/v1/links/2", "", apiKey, "", "/api/v1/links/{id}", "GET", "success", 200},
+		{http.MethodPost, "/api/v1/links", `{}`, "", "application/json", "/api/v1/links", "POST", "client_error", 401},
+		{http.MethodPost, "/api/v1/links", `{"destination":`, apiKey, "application/json", "/api/v1/links", "POST", "client_error", 400},
+		{http.MethodGet, "/unknown/route-one", "", "", "", "unmatched", "GET", "client_error", 404},
+		{http.MethodGet, "/unknown/route-two", "", "", "", "unmatched", "GET", "client_error", 404},
+		{http.MethodPut, "/api/v1/links", "", apiKey, "", "/api/v1/links", "PUT", "client_error", 405},
+		{"CUSTOM", "/api/v1/links", "", apiKey, "", "/api/v1/links", "OTHER", "client_error", 405},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%s_%s_%d", tc.method, tc.path, tc.status), func(t *testing.T) {
+			before := stack.httpMetrics(t)
+			headers, body := stack.expect(t, tc.method, tc.path, tc.body, tc.key, tc.media, tc.status)
+			if tc.status == http.StatusFound {
+				require.Equal(t, "https://example.com/private", headers.Get("Location"))
+				if tc.method == http.MethodHead {
+					require.Empty(t, body)
+				}
+			}
+			after := stack.httpMetrics(t)
+			labels := map[string]string{"method": tc.metricMethod, "route": tc.route, "status": strconv.Itoa(tc.status), "outcome": tc.outcome}
+			require.Equal(t, before.value("shortener_http_requests_total", labels)+1, after.value("shortener_http_requests_total", labels))
+			require.Equal(t, before.total("shortener_http_requests_total")+1, after.total("shortener_http_requests_total"))
+			durationLabels := map[string]string{"method": tc.metricMethod, "route": tc.route}
+			require.Equal(t, before.value("shortener_http_request_duration_seconds", durationLabels)+1, after.value("shortener_http_request_duration_seconds", durationLabels))
+			require.Equal(t, before.total("shortener_http_request_duration_seconds")+1, after.total("shortener_http_request_duration_seconds"))
+			require.NotNil(t, after.find("shortener_http_requests_in_flight", durationLabels))
+			require.Zero(t, after.value("shortener_http_requests_in_flight", durationLabels))
+		})
+	}
+
+	before := stack.httpMetrics(t)
+	stack.expect(t, http.MethodGet, "/health", "", "", "", http.StatusOK)
+	after := stack.httpMetrics(t)
+	require.Equal(t, before.total("shortener_http_requests_total"), after.total("shortener_http_requests_total"), "health and scrape requests must not count as business traffic")
+	require.Equal(t, before.total("shortener_http_request_duration_seconds"), after.total("shortener_http_request_duration_seconds"))
+	for _, family := range after {
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				for _, secret := range []string{"metric-alpha", "metric-bravo", "example.com", apiKey, "route-one", "route-two"} {
+					require.NotContains(t, label.GetValue(), secret)
+				}
+			}
+		}
+	}
+}
+
+type httpMetricFamilies map[string]*dto.MetricFamily
+
+func (s httpSuite) httpMetrics(t *testing.T) httpMetricFamilies {
+	t.Helper()
+	response, err := s.client.Get(s.metricsBase + "/metrics")
+	require.NoError(t, err)
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	families, err := parser.TextToMetricFamilies(response.Body)
+	require.NoError(t, err)
+	return families
+}
+
+func (families httpMetricFamilies) value(name string, labels map[string]string) float64 {
+	metric := families.find(name, labels)
+	if metric == nil {
+		return 0
+	}
+	return httpMetricValue(metric)
+}
+
+func (families httpMetricFamilies) find(name string, labels map[string]string) *dto.Metric {
+	family := families[name]
+	if family == nil {
+		return nil
+	}
+	for _, metric := range family.GetMetric() {
+		if len(metric.GetLabel()) != len(labels) {
+			continue
+		}
+		matches := true
+		for _, label := range metric.GetLabel() {
+			if value, exists := labels[label.GetName()]; !exists || value != label.GetValue() {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return metric
+		}
+	}
+	return nil
+}
+
+func (families httpMetricFamilies) total(name string) float64 {
+	var total float64
+	for _, metric := range families[name].GetMetric() {
+		total += httpMetricValue(metric)
+	}
+	return total
+}
+
+func httpMetricValue(metric *dto.Metric) float64 {
+	switch {
+	case metric.Counter != nil:
+		return metric.GetCounter().GetValue()
+	case metric.Gauge != nil:
+		return metric.GetGauge().GetValue()
+	case metric.Histogram != nil:
+		return float64(metric.GetHistogram().GetSampleCount())
+	default:
+		return 0
+	}
 }
