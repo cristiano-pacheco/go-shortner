@@ -18,7 +18,7 @@ type LinkUpdateInput struct {
 	Destination  *string `validate:"omitempty,required"`
 	Active       *bool
 	SetExpiresAt bool
-	ExpiresAt    *time.Time `validate:"-"`
+	ExpiresAt    *time.Time `validate:"omitempty,gt"`
 }
 
 type LinkUpdateOutput struct {

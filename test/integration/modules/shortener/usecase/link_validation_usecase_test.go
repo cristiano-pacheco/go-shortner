@@ -77,7 +77,7 @@ func (s *LinkValidationUseCaseSuite) TestExpirationPrecisionAndOptionalUpdate() 
 	s.Require().NotNil(created.ExpiresAt)
 	s.True(expiration.Truncate(time.Microsecond).Equal(*created.ExpiresAt))
 
-	ignoredExpiration := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	ignoredExpiration := time.Date(2098, 1, 1, 0, 0, 0, 0, time.UTC)
 	active := false
 	updated, err := s.linkUpdateUseCase.Execute(ctx, usecase.LinkUpdateInput{ID: created.ID, Active: &active, ExpiresAt: &ignoredExpiration})
 	s.Require().NoError(err)
@@ -92,6 +92,28 @@ func (s *LinkValidationUseCaseSuite) TestExpirationPrecisionAndOptionalUpdate() 
 	s.Require().NoError(err)
 	s.False(stored.Active)
 	s.Nil(stored.ExpiresAt)
+}
+
+func (s *LinkValidationUseCaseSuite) TestPastExpirationReturnsValidationError() {
+	ctx := context.Background()
+	created, err := s.linkCreateUseCase.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com"})
+	s.Require().NoError(err)
+	for _, expiration := range []time.Time{{}, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)} {
+		_, err = s.linkCreateUseCase.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com", ExpiresAt: &expiration})
+		var validationErrors playgroundvalidator.ValidationErrors
+		s.Require().ErrorAs(err, &validationErrors)
+		s.Require().Len(validationErrors, 1)
+		s.Equal("ExpiresAt", validationErrors[0].Field())
+		s.Equal("gt", validationErrors[0].Tag())
+
+		for _, setExpiresAt := range []bool{false, true} {
+			_, err = s.linkUpdateUseCase.Execute(ctx, usecase.LinkUpdateInput{ID: created.ID, SetExpiresAt: setExpiresAt, ExpiresAt: &expiration})
+			s.Require().ErrorAs(err, &validationErrors)
+			s.Require().Len(validationErrors, 1)
+			s.Equal("ExpiresAt", validationErrors[0].Field())
+			s.Equal("gt", validationErrors[0].Tag())
+		}
+	}
 }
 
 func (s *LinkValidationUseCaseSuite) TestInvalidUpdateDoesNotChangePersistedLink() {

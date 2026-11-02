@@ -19,7 +19,7 @@ const maxCodeAttempts = 5
 type LinkCreateInput struct {
 	Destination string     `validate:"required"`
 	Alias       *string    `validate:"omitempty,min=3,max=32"`
-	ExpiresAt   *time.Time `validate:"-"`
+	ExpiresAt   *time.Time `validate:"omitempty,gt"`
 }
 
 type LinkCreateOutput struct {
