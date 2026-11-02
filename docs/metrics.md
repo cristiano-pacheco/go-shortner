@@ -23,6 +23,17 @@ For six use cases, one unlabeled success counter, five error-category series
 and one histogram per use case produce at most 138 series per instance: six
 success, 30 error and 102 histogram series (14 finite buckets, `+Inf`, `_sum`
 and `_count` per histogram).
-This budget excludes HTTP, dependency, pool, Go and process metrics; their
-instrumentation must document its own cardinality and update the total. No
-business collectors are registered until their instrumentation is implemented.
+This proposed budget excludes HTTP, dependency, pool, Go and process metrics.
+
+HTTP request duration uses the finite buckets `0.001, 0.0025, 0.005, 0.01,
+0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15` seconds. These are not
+performance targets. HTTP metrics use ten method labels, including `OTHER`,
+and five route labels, including `unmatched` and `/health` for non-probe
+requests. The histogram has 17 series per method and route, and the in-flight
+gauge has one, for at most 900 series. Status codes are bounded to the HTTP
+server's 100 through 999 range. The outcome is determined by status, so the
+counter has at most 45,000 series across all methods, routes and statuses. The
+combined theoretical HTTP maximum is 45,900 series per instance. Normal use
+creates only the label combinations observed in traffic. Together with the
+proposed use-case budget, the maximum is 46,038 series, excluding dependency,
+pool, Go and process metrics.

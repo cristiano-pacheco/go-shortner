@@ -120,6 +120,7 @@ func TestHTTPMetrics(t *testing.T) {
 		{http.MethodGet, "/unknown/route-one", "", "", "", "unmatched", "GET", "client_error", 404},
 		{http.MethodGet, "/unknown/route-two", "", "", "", "unmatched", "GET", "client_error", 404},
 		{http.MethodPut, "/api/v1/links", "", apiKey, "", "/api/v1/links", "PUT", "client_error", 405},
+		{http.MethodPost, "/health", "", "", "", "/health", "POST", "client_error", 405},
 		{"CUSTOM", "/api/v1/links", "", apiKey, "", "/api/v1/links", "OTHER", "client_error", 405},
 	}
 

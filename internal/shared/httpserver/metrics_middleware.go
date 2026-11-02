@@ -54,7 +54,7 @@ func NewMetricsMiddleware(registerer prometheus.Registerer) (*MetricsMiddleware,
 
 func (m *MetricsMiddleware) Wrap(router chi.Router) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" && r.Method == http.MethodGet {
 			router.ServeHTTP(w, r)
 			return
 		}
