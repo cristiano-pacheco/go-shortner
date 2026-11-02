@@ -211,6 +211,16 @@ func (s *CreateLinkSuite) TestRejectsExpiredLink() {
 	)
 }
 
+func (s *CreateLinkSuite) TestMigrationRerunPreservesExistingRows() {
+	s.create("migration-rerun-e2e")
+	before := s.persistedLinks()
+	s.Require().Len(before, 1)
+
+	out, err := s.http.run("run", "--rm", "--no-deps", "app", "migrate")
+	s.Require().NoError(err, "rerun migrations: %s", out)
+	s.Equal(before, s.persistedLinks())
+}
+
 func (s *CreateLinkSuite) TestDuplicateAliasDoesNotChangeExistingRow() {
 	s.create("duplicate-e2e")
 	before := s.persistedLinks()

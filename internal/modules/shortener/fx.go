@@ -1,11 +1,13 @@
 package shortener
 
 import (
+	bricksmigration "github.com/cristiano-pacheco/bricks/pkg/migration"
 	"go.uber.org/fx"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/cache"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/handler"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/chi/router"
+	shortenermigration "github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/migration"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/service"
@@ -31,5 +33,7 @@ var Module = fx.Module("shortener", fx.Provide(
 	router.NewLinkRedirectRouter,
 	fx.Annotate((*router.LinkRedirectRouter).PublicRoute, fx.ResultTags(`group:"public_routes"`)),
 	fx.Annotate((*router.LinkRouter).ManagementRoute, fx.ResultTags(`group:"management_routes"`)),
-	fx.Annotate(provideMigrationFileSystem, fx.ResultTags(`group:"migration_filesystems"`)),
+	fx.Annotate(func() bricksmigration.FileSystem {
+		return bricksmigration.New(shortenermigration.Files)
+	}, fx.ResultTags(`group:"migration_filesystems"`)),
 ))
