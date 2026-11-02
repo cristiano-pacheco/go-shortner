@@ -32,8 +32,10 @@ func TestListLinkSuite(t *testing.T) {
 func (s *ListLinkSuite) list(query string) listResponse {
 	s.T().Helper()
 	_, body := s.http.expect(s.T(), http.MethodGet, "/api/v1/links"+query, "", apiKey, "", http.StatusOK)
+
 	var response listResponse
 	s.Require().NoError(json.Unmarshal(body, &response))
+
 	return response
 }
 
@@ -97,6 +99,7 @@ func (s *ListLinkSuite) TestDefaultPaginationAcrossPages() {
 	s.Equal(20, second.Data.PageSize)
 	s.Require().Len(first.Data.Items, 20)
 	s.Require().Len(second.Data.Items, 5)
+
 	for index, item := range append(first.Data.Items, second.Data.Items...) {
 		s.Equal(int64(25-index), item.ID)
 	}
@@ -110,10 +113,12 @@ func (s *ListLinkSuite) assertCustomPage(page int, want []int64) {
 	s.Equal(3, response.Data.PageSize)
 	s.Equal(7, response.Data.Total)
 	s.NotNil(response.Data.Items)
+
 	ids := make([]int64, 0, len(response.Data.Items))
 	for _, item := range response.Data.Items {
 		ids = append(ids, item.ID)
 	}
+
 	s.Equal(want, ids)
 }
 
@@ -191,10 +196,12 @@ func (s *ListLinkSuite) TestOrderingByCreationTimeAndID() {
 	s.sql(`UPDATE links SET created_at = '2022-01-01 00:00:00+00' WHERE id = 1`)
 	response := s.list("?page_size=10")
 	s.Require().Len(response.Data.Items, 6)
+
 	ids := make([]int64, 0, 6)
 	for _, item := range response.Data.Items {
 		ids = append(ids, item.ID)
 	}
+
 	s.Equal([]int64{1, 6, 5, 4, 3, 2}, ids)
 }
 
@@ -206,6 +213,7 @@ UPDATE links SET deleted_at = '2021-03-01 00:00:00+00' WHERE id = 4`)
 	response := s.list("?page_size=10")
 	s.Equal(3, response.Data.Total)
 	s.Require().Len(response.Data.Items, 3)
+
 	for index, item := range response.Data.Items {
 		id := int64(3 - index)
 		s.Equal(id, item.ID)
@@ -215,6 +223,7 @@ UPDATE links SET deleted_at = '2021-03-01 00:00:00+00' WHERE id = 4`)
 		s.Equal(id != 1, item.Active)
 		s.Equal(time.Date(2021, 1, 1, 0, 0, int((id-1)/2), 0, time.UTC), item.CreatedAt)
 		s.Equal(time.Date(2021, 2, 1, 0, 0, 0, 0, time.UTC), item.UpdatedAt)
+
 		if id == 2 {
 			if s.NotNil(item.ExpiresAt) {
 				s.True(item.ExpiresAt.Equal(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)))

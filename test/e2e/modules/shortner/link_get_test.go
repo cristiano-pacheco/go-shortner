@@ -49,6 +49,7 @@ func (s *GetLinkSuite) TestGetInactiveLink() {
 	s.Equal("inactive-link", item.Code)
 	s.Equal("https://example.com/inactive", item.Destination)
 	s.False(item.Active)
+
 	if s.NotNil(item.ExpiresAt) {
 		s.True(item.ExpiresAt.Equal(time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)))
 	}
@@ -61,6 +62,7 @@ func (s *GetLinkSuite) TestGetExpiredLink() {
 	s.Equal(int64(3), item.ID)
 	s.Equal("expired-link", item.Code)
 	s.True(item.Active)
+
 	if s.NotNil(item.ExpiresAt) {
 		s.True(item.ExpiresAt.Equal(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)))
 	}

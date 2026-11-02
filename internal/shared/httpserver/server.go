@@ -11,7 +11,6 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/infrastructure"
 )
 
 const (
@@ -34,7 +33,6 @@ type serverParams struct {
 	Lifecycle        fx.Lifecycle
 	Shutdown         fx.Shutdowner
 	Config           config.Config
-	Resources        *infrastructure.Resources
 	Authentication   *APIKeyMiddleware
 	ManagementRoutes []ManagementRoute `group:"management_routes"`
 	PublicRoutes     []PublicRoute     `group:"public_routes"`
