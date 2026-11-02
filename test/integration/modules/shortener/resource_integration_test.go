@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build integration
 
-package shortner_test
+package shortener_test
 
 import (
 	"context"

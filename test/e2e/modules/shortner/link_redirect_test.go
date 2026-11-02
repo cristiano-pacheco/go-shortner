@@ -16,6 +16,7 @@ type RedirectLinkSuite struct {
 	endpointSuite
 }
 
+//nolint:paralleltest // The suite restarts its Compose dependencies.
 func TestRedirectLinkSuite(t *testing.T) {
 	suite.Run(t, new(RedirectLinkSuite))
 }
@@ -91,7 +92,7 @@ func (s *RedirectLinkSuite) TestFutureExpirationAllowsRedirect() {
 }
 
 func (s *RedirectLinkSuite) TestWarmCacheStopsRedirectingAfterExpiration() {
-	expires := time.Now().UTC().Add(15 * time.Second)
+	expires := time.Now().UTC().Add(4 * time.Second)
 	payload := fmt.Sprintf(
 		`{"destination":"https://example.com/expiring","alias":"expiring-cache","expires_at":%q}`,
 		expires.Format(time.RFC3339Nano),
