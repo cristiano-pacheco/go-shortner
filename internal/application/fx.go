@@ -18,13 +18,10 @@ import (
 var Module = fx.Options(
 	fx.Provide(config.Load),
 	bricksvalidator.Module,
-	fx.Provide(newMetricsRegistry),
-	fx.Provide(func(registry *prometheus.Registry) prometheus.Gatherer {
-		return registry
-	}),
-	fx.Provide(func(registry *prometheus.Registry) prometheus.Registerer {
-		return registry
-	}),
+	fx.Provide(fx.Annotate(newMetricsRegistry,
+		fx.As(new(prometheus.Gatherer)),
+		fx.As(new(prometheus.Registerer)),
+	)),
 	bricksmetrics.Module,
 	database.Module,
 	redis.Module,
