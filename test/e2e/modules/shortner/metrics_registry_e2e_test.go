@@ -17,8 +17,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 
-	"github.com/cristiano-pacheco/go-shortner/cmd"
+	"github.com/cristiano-pacheco/go-shortner/internal/application"
 )
 
 //nolint:paralleltest // The test sets process environment and registers a global sentinel.
@@ -100,63 +101,41 @@ func TestMetricsRegistryIsolationAcrossSequentialApplications(t *testing.T) {
 func (s httpSuite) assertMetricsRegistry(t *testing.T, metricsPort int) {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
+	var registerer prometheus.Registerer
 
-	var runErr error
+	app := fx.New(fx.NopLogger, application.Module, fx.Populate(&registerer))
+	require.NoError(t, app.Err())
 
-	command := cmd.NewRootCommand()
+	sentinel := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "shortner_test_application_registry_sentinel",
+		Help: "Application registry isolation sentinel.",
+	})
+	require.NoError(t, registerer.Register(sentinel))
+	sentinel.Set(73)
 
-	command.SetArgs([]string{"server"})
-	go func() {
-		runErr = command.ExecuteContext(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	err := app.Start(ctx)
 
-		close(done)
-	}()
-
+	cancel()
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		cancel()
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stopCancel()
 
-		select {
-		case <-done:
-			if runErr != nil {
-				t.Errorf("application stopped: %v", runErr)
-			}
-		case <-time.After(15 * time.Second):
-			t.Error("application did not shut down")
+		if stopErr := app.Stop(stopCtx); stopErr != nil {
+			t.Errorf("application shutdown: %v", stopErr)
 		}
 	})
 
-	var body []byte
+	response, err := s.client.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", metricsPort))
+	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		select {
-		case <-done:
-			return true
-		default:
-		}
+	defer response.Body.Close()
 
-		response, requestErr := s.client.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", metricsPort))
-		if requestErr != nil {
-			return false
-		}
-		defer response.Body.Close()
-
-		if response.StatusCode != http.StatusOK {
-			return false
-		}
-
-		body, requestErr = io.ReadAll(response.Body)
-
-		return requestErr == nil
-	}, 30*time.Second, 100*time.Millisecond)
-
-	select {
-	case <-done:
-		t.Fatalf("application stopped during startup: %v", runErr)
-	default:
-	}
-
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "shortner_test_application_registry_sentinel 73")
 	require.Contains(t, string(body), "go_goroutines ")
 	require.Contains(t, string(body), "process_cpu_seconds_total ")
 	require.NotContains(t, string(body), "shortner_test_global_registry_sentinel")
