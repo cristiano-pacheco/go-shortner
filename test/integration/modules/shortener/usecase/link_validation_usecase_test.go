@@ -5,12 +5,14 @@ package usecase_test
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cristiano-pacheco/bricks/pkg/itestkit"
 	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
 	playgroundvalidator "github.com/go-playground/validator/v10"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
@@ -20,12 +22,15 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 type LinkValidationUseCaseSuite struct {
 	suite.Suite
 	kit                *itestkit.ITestKit
+	registry           *prometheus.Registry
+	linkDeleteUseCase  *usecase.LinkDeleteUseCase
 	linkCreateUseCase  *usecase.LinkCreateUseCase
 	linkGetUseCase     *usecase.LinkGetUseCase
 	linkUpdateUseCase  *usecase.LinkUpdateUseCase
@@ -55,12 +60,15 @@ func (s *LinkValidationUseCaseSuite) SetupTest() {
 	s.Require().NoError(s.kit.Redis().FlushDB(context.Background()).Err())
 	redisClient, ok := s.kit.Redis().(*redis.Client)
 	s.Require().True(ok)
+	s.registry = prometheus.NewRegistry()
 	app := fx.New(
 		fx.NopLogger,
 		shortener.Module,
 		bricksvalidator.Module,
+		fx.Provide(metrics.New),
+		fx.Supply(fx.Annotate(s.registry, fx.As(new(prometheus.Registerer)))),
 		fx.Supply(&database.Database{DB: s.kit.DB()}, &sharedredis.Client{Client: redisClient}, config.Config{PublicBaseURL: "https://short.example"}),
-		fx.Populate(&s.linkCreateUseCase, &s.linkGetUseCase, &s.linkUpdateUseCase, &s.linkListUseCase, &s.linkResolveUseCase),
+		fx.Populate(&s.linkCreateUseCase, &s.linkGetUseCase, &s.linkUpdateUseCase, &s.linkListUseCase, &s.linkResolveUseCase, &s.linkDeleteUseCase),
 	)
 	s.Require().NoError(app.Err())
 	s.Require().NoError(app.Start(context.Background()))
@@ -150,4 +158,76 @@ func (s *LinkValidationUseCaseSuite) TestDirectInputsRejectInvalidValues() {
 		_, err = s.linkResolveUseCase.Execute(ctx, usecase.LinkResolveInput{Code: code})
 		s.ErrorIs(err, errs.ErrLinkNotFound)
 	}
+}
+
+// TestDirectInvalidInputsAreObserved covers values that HTTP decoding rejects before a use case runs.
+func (s *LinkValidationUseCaseSuite) TestDirectInvalidInputsAreObserved() {
+	ctx := context.Background()
+	cases := []struct {
+		operation string
+		execute   func() error
+	}{
+		{"create", func() error {
+			_, err := s.linkCreateUseCase.Execute(ctx, usecase.LinkCreateInput{})
+			return err
+		}},
+		{"get", func() error {
+			_, err := s.linkGetUseCase.Execute(ctx, usecase.LinkGetInput{})
+			return err
+		}},
+		{"list", func() error {
+			_, err := s.linkListUseCase.Execute(ctx, usecase.LinkListInput{Page: math.MaxInt, PageSize: 100})
+			return err
+		}},
+		{"update", func() error {
+			_, err := s.linkUpdateUseCase.Execute(ctx, usecase.LinkUpdateInput{})
+			return err
+		}},
+		{"delete", func() error {
+			_, err := s.linkDeleteUseCase.Execute(ctx, usecase.LinkDeleteInput{})
+			return err
+		}},
+		{"resolve", func() error {
+			_, err := s.linkResolveUseCase.Execute(ctx, usecase.LinkResolveInput{})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		s.Run(tc.operation, func() {
+			beforeInvalid, beforeOutcomes, beforeDuration := s.metricCounts(tc.operation)
+			s.Require().Error(tc.execute())
+			afterInvalid, afterOutcomes, afterDuration := s.metricCounts(tc.operation)
+			s.Equal(beforeInvalid+1, afterInvalid)
+			s.Equal(beforeOutcomes+1, afterOutcomes)
+			s.Equal(beforeDuration+1, afterDuration)
+		})
+	}
+}
+
+func (s *LinkValidationUseCaseSuite) metricCounts(operation string) (float64, float64, uint64) {
+	s.T().Helper()
+	families, err := s.registry.Gather()
+	s.Require().NoError(err)
+	var invalid, outcomes float64
+	var duration uint64
+	for _, family := range families {
+		name := family.GetName()
+		for _, metric := range family.GetMetric() {
+			if strings.HasPrefix(name, "shortener_usecase_") &&
+				(strings.HasSuffix(name, "_success_total") || strings.HasSuffix(name, "_errors_total")) {
+				outcomes += metric.GetCounter().GetValue()
+			}
+			switch name {
+			case "shortener_usecase_" + operation + "_errors_total":
+				for _, label := range metric.GetLabel() {
+					if label.GetName() == "category" && label.GetValue() == "invalid_argument" {
+						invalid += metric.GetCounter().GetValue()
+					}
+				}
+			case "shortener_usecase_" + operation + "_duration_seconds":
+				duration += metric.GetHistogram().GetSampleCount()
+			}
+		}
+	}
+	return invalid, outcomes, duration
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 type LinkListInput struct {
@@ -37,34 +38,42 @@ type LinkListOutput struct {
 }
 
 type LinkListUseCase struct {
-	validator      bricksvalidator.Validator
-	linkRepository port.LinkRepository
-	baseURL        string
+	applicationMetrics *metrics.Metrics
+	validator          bricksvalidator.Validator
+	linkRepository     port.LinkRepository
+	baseURL            string
 }
 
 func NewLinkListUseCase(
 	linkRepository port.LinkRepository,
 	cfg config.Config,
 	validator bricksvalidator.Validator,
+	applicationMetrics *metrics.Metrics,
 ) *LinkListUseCase {
 	return &LinkListUseCase{
-		linkRepository: linkRepository,
-		baseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
-		validator:      validator,
+		applicationMetrics: applicationMetrics,
+		linkRepository:     linkRepository,
+		baseURL:            strings.TrimRight(cfg.PublicBaseURL, "/"),
+		validator:          validator,
 	}
 }
 
 func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (LinkListOutput, error) {
+	defer uc.applicationMetrics.ObserveListDuration(time.Now())
+
 	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementListError(errs.MetricCategory(err))
 		return LinkListOutput{}, err
 	}
 
 	if input.Page-1 > math.MaxInt/input.PageSize {
+		uc.applicationMetrics.IncrementListError(errs.MetricCategory(errs.ErrInvalidInput))
 		return LinkListOutput{}, errs.ErrInvalidInput
 	}
 
 	links, total, err := uc.linkRepository.List(ctx, input.PageSize, (input.Page-1)*input.PageSize)
 	if err != nil {
+		uc.applicationMetrics.IncrementListError(errs.MetricCategory(err))
 		return LinkListOutput{}, err
 	}
 
@@ -76,6 +85,8 @@ func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (Li
 			ExpiresAt: link.ExpiresAt, CreatedAt: link.CreatedAt, UpdatedAt: link.UpdatedAt,
 		})
 	}
+
+	uc.applicationMetrics.IncrementListSuccess()
 
 	return LinkListOutput{Items: items, Page: input.Page, PageSize: input.PageSize, Total: total}, nil
 }

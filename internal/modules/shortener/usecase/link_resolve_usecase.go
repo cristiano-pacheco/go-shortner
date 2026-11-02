@@ -8,6 +8,7 @@ import (
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 const redirectSnapshotLifetime = 60 * time.Second
@@ -21,36 +22,58 @@ type LinkResolveOutput struct {
 }
 
 type LinkResolveUseCase struct {
-	validator      bricksvalidator.Validator
-	linkRepository port.LinkRepository
-	redirectCache  port.RedirectCache
+	applicationMetrics *metrics.Metrics
+	validator          bricksvalidator.Validator
+	linkRepository     port.LinkRepository
+	redirectCache      port.RedirectCache
 }
 
 func NewLinkResolveUseCase(
 	linkRepository port.LinkRepository,
 	redirectCache port.RedirectCache,
 	validator bricksvalidator.Validator,
+	applicationMetrics *metrics.Metrics,
 ) *LinkResolveUseCase {
-	return &LinkResolveUseCase{linkRepository: linkRepository, redirectCache: redirectCache, validator: validator}
+	return &LinkResolveUseCase{
+		linkRepository:     linkRepository,
+		redirectCache:      redirectCache,
+		validator:          validator,
+		applicationMetrics: applicationMetrics,
+	}
 }
 
-func (uc *LinkResolveUseCase) Execute(ctx context.Context, input LinkResolveInput) (LinkResolveOutput, error) {
+func (uc *LinkResolveUseCase) Execute(
+	ctx context.Context,
+	input LinkResolveInput,
+) (LinkResolveOutput, error) {
+	defer uc.applicationMetrics.ObserveResolveDuration(time.Now())
+
 	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementResolveError(errs.MetricCategory(err))
 		return LinkResolveOutput{}, err
 	}
 
 	if input.Code == "api" || input.Code == "health" {
+		uc.applicationMetrics.IncrementResolveError(errs.MetricCategory(errs.ErrLinkNotFound))
 		return LinkResolveOutput{}, errs.ErrLinkNotFound
 	}
 
 	if snapshot, ok := uc.cachedSnapshot(ctx, input.Code); ok {
+		uc.applicationMetrics.IncrementResolveSuccess()
 		return LinkResolveOutput{Destination: snapshot.Destination}, nil
 	}
 
 	for {
 		output, retry, err := uc.resolveFromDatabase(ctx, input.Code)
 		if !retry {
-			return output, err
+			if err != nil {
+				uc.applicationMetrics.IncrementResolveError(errs.MetricCategory(err))
+				return output, err
+			}
+
+			uc.applicationMetrics.IncrementResolveSuccess()
+
+			return output, nil
 		}
 	}
 }

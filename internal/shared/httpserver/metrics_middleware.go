@@ -2,54 +2,20 @@ package httpserver
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/prometheus/client_golang/prometheus"
-)
 
-const (
-	methodLabel = "method"
-	routeLabel  = "route"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 type MetricsMiddleware struct {
-	requests *prometheus.CounterVec
-	duration *prometheus.HistogramVec
-	inFlight *prometheus.GaugeVec
+	applicationMetrics *metrics.Metrics
 }
 
-func NewMetricsMiddleware(registerer prometheus.Registerer) (*MetricsMiddleware, error) {
-	metrics := &MetricsMiddleware{
-		requests: prometheus.NewCounterVec(
-			prometheus.CounterOpts{Name: "shortener_http_requests_total", Help: "Completed business HTTP requests."},
-			[]string{methodLabel, routeLabel, "status", "outcome"},
-		),
-		duration: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "shortener_http_request_duration_seconds",
-				Help:    "Business HTTP request duration in seconds.",
-				Buckets: []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15},
-			},
-			[]string{methodLabel, routeLabel},
-		),
-		inFlight: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "shortener_http_requests_in_flight",
-				Help: "Business HTTP requests currently in progress.",
-			},
-			[]string{methodLabel, routeLabel},
-		),
-	}
-	for _, collector := range []prometheus.Collector{metrics.requests, metrics.duration, metrics.inFlight} {
-		if err := registerer.Register(collector); err != nil {
-			return nil, err
-		}
-	}
-
-	return metrics, nil
+func NewMetricsMiddleware(applicationMetrics *metrics.Metrics) *MetricsMiddleware {
+	return &MetricsMiddleware{applicationMetrics: applicationMetrics}
 }
 
 func (m *MetricsMiddleware) Wrap(router chi.Router) http.Handler {
@@ -63,13 +29,11 @@ func (m *MetricsMiddleware) Wrap(router chi.Router) http.Handler {
 		writer := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		start := time.Now()
 
-		m.inFlight.WithLabelValues(method, route).Inc()
+		m.applicationMetrics.StartHTTPRequest(method, route)
 
 		completed := false
 
 		defer func() {
-			m.inFlight.WithLabelValues(method, route).Dec()
-
 			status := writer.Status()
 			if status == 0 {
 				status = http.StatusOK
@@ -78,8 +42,7 @@ func (m *MetricsMiddleware) Wrap(router chi.Router) http.Handler {
 				}
 			}
 
-			m.requests.WithLabelValues(method, route, strconv.Itoa(status), m.outcome(status)).Inc()
-			m.duration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
+			m.applicationMetrics.FinishHTTPRequest(method, route, status, m.outcome(status), start)
 		}()
 
 		router.ServeHTTP(writer, r)

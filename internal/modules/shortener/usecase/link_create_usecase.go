@@ -12,6 +12,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 const maxCodeAttempts = 5
@@ -34,6 +35,7 @@ type LinkCreateOutput struct {
 }
 
 type LinkCreateUseCase struct {
+	applicationMetrics   *metrics.Metrics
 	validator            bricksvalidator.Validator
 	repository           port.LinkRepository
 	generator            port.CodeGenerator
@@ -46,9 +48,11 @@ func NewLinkCreateUseCase(
 	generator port.CodeGenerator,
 	destinationValidator port.DestinationValidator,
 	validator bricksvalidator.Validator,
+	applicationMetrics *metrics.Metrics,
 	cfg config.Config,
 ) *LinkCreateUseCase {
 	return &LinkCreateUseCase{
+		applicationMetrics:   applicationMetrics,
 		validator:            validator,
 		repository:           repository,
 		generator:            generator,
@@ -58,23 +62,37 @@ func NewLinkCreateUseCase(
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
+	defer uc.applicationMetrics.ObserveCreateDuration(time.Now())
+
 	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
 		return LinkCreateOutput{}, err
 	}
 
 	if err := uc.destinationValidator.Validate(input.Destination); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
 		return LinkCreateOutput{}, err
 	}
 
 	if err := uc.normalizeExpiration(&input); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
 		return LinkCreateOutput{}, err
 	}
 
 	if input.Alias != nil && !uc.validAlias(*input.Alias) {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(errs.ErrInvalidInput))
 		return LinkCreateOutput{}, errs.ErrInvalidInput
 	}
 
-	return uc.create(ctx, input)
+	output, err := uc.create(ctx, input)
+	if err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
+		return output, err
+	}
+
+	uc.applicationMetrics.IncrementCreateSuccess()
+
+	return output, nil
 }
 
 func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {

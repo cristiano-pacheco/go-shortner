@@ -12,6 +12,7 @@ import (
 	"time"
 
 	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
@@ -152,6 +154,10 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 
 	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, bricksvalidator.Module,
 		fx.Provide(
+			func() prometheus.Registerer {
+				return prometheus.NewRegistry()
+			},
+			metrics.New,
 			fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 			fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),
 			fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),

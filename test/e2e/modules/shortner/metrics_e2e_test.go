@@ -311,3 +311,82 @@ func httpMetricValue(metric *dto.Metric) float64 {
 		return 0
 	}
 }
+
+//nolint:paralleltest // The cases share an isolated Compose stack and its database.
+func TestUseCaseMetrics(t *testing.T) {
+	stack := start(t)
+
+	type requestCase struct {
+		method, path, body, key, media string
+		operation, category            string
+		status                         int
+	}
+	cases := []requestCase{
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"usecase-metric"}`, apiKey, "application/json", "create", "", http.StatusCreated},
+		{http.MethodGet, "/api/v1/links/1", "", apiKey, "", "get", "", http.StatusOK},
+		{http.MethodGet, "/api/v1/links", "", apiKey, "", "list", "", http.StatusOK},
+		{http.MethodPatch, "/api/v1/links/1", `{"destination":"https://example.org/updated"}`, apiKey, "application/json", "update", "", http.StatusOK},
+		{http.MethodGet, "/usecase-metric", "", "", "", "resolve", "", http.StatusFound},
+		{http.MethodHead, "/usecase-metric", "", "", "", "resolve", "", http.StatusFound},
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"usecase-metric"}`, apiKey, "application/json", "create", "conflict", http.StatusConflict},
+		{http.MethodPost, "/api/v1/links", `{"destination":"not-a-url"}`, apiKey, "application/json", "create", "invalid_argument", http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/links/999999", "", apiKey, "", "get", "not_found", http.StatusNotFound},
+		{http.MethodGet, "/absent-metric", "", "", "", "resolve", "not_found", http.StatusNotFound},
+		{http.MethodDelete, "/api/v1/links/1", "", apiKey, "", "delete", "", http.StatusNoContent},
+		{http.MethodPost, "/api/v1/links", `{}`, "", "application/json", "", "", http.StatusUnauthorized},
+		{http.MethodPost, "/api/v1/links", `{"destination":`, apiKey, "application/json", "", "", http.StatusBadRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%s_%s_%d", tc.method, tc.path, tc.status), func(t *testing.T) {
+			before := stack.httpMetrics(t)
+			stack.expect(t, tc.method, tc.path, tc.body, tc.key, tc.media, tc.status)
+			after := stack.httpMetrics(t)
+			assertUseCaseMetricDelta(t, before, after, tc.operation, tc.category)
+		})
+	}
+
+	out, err := stack.run("stop", "postgres")
+	require.NoError(t, err, "%s", out)
+	before := stack.httpMetrics(t)
+	stack.expect(t, http.MethodGet, "/api/v1/links/999998", "", apiKey, "", http.StatusInternalServerError)
+	after := stack.httpMetrics(t)
+	assertUseCaseMetricDelta(t, before, after, "get", "internal")
+
+	for name, family := range after {
+		if !strings.HasPrefix(name, "shortener_usecase_") {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				for _, secret := range []string{"usecase-metric", "absent-metric", "example.com", "example.org", apiKey} {
+					require.NotContains(t, label.GetValue(), secret)
+				}
+			}
+		}
+	}
+}
+
+func assertUseCaseMetricDelta(t *testing.T, before, after httpMetricFamilies, operation, category string) {
+	t.Helper()
+
+	for _, candidate := range []string{"create", "get", "list", "update", "delete", "resolve"} {
+		success, failures, duration := 0.0, 0.0, 0.0
+		if operation == candidate {
+			duration = 1
+			if category == "" {
+				success = 1
+			} else {
+				failures = 1
+			}
+		}
+		prefix := "shortener_usecase_" + candidate
+		require.Equal(t, before.total(prefix+"_success_total")+success, after.total(prefix+"_success_total"))
+		require.Equal(t, before.total(prefix+"_errors_total")+failures, after.total(prefix+"_errors_total"))
+		require.Equal(t, before.total(prefix+"_duration_seconds")+duration, after.total(prefix+"_duration_seconds"))
+		if failures != 0 {
+			labels := map[string]string{"category": category}
+			require.Equal(t, before.value(prefix+"_errors_total", labels)+1, after.value(prefix+"_errors_total", labels))
+		}
+	}
+}

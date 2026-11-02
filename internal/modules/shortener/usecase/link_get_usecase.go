@@ -7,8 +7,10 @@ import (
 
 	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
 
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 type LinkGetInput struct {
@@ -27,32 +29,41 @@ type LinkGetOutput struct {
 }
 
 type LinkGetUseCase struct {
-	validator      bricksvalidator.Validator
-	linkRepository port.LinkRepository
-	baseURL        string
+	applicationMetrics *metrics.Metrics
+	validator          bricksvalidator.Validator
+	linkRepository     port.LinkRepository
+	baseURL            string
 }
 
 func NewLinkGetUseCase(
 	linkRepository port.LinkRepository,
 	cfg config.Config,
 	validator bricksvalidator.Validator,
+	applicationMetrics *metrics.Metrics,
 ) *LinkGetUseCase {
 	return &LinkGetUseCase{
-		linkRepository: linkRepository,
-		baseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
-		validator:      validator,
+		applicationMetrics: applicationMetrics,
+		linkRepository:     linkRepository,
+		baseURL:            strings.TrimRight(cfg.PublicBaseURL, "/"),
+		validator:          validator,
 	}
 }
 
 func (uc *LinkGetUseCase) Execute(ctx context.Context, input LinkGetInput) (LinkGetOutput, error) {
+	defer uc.applicationMetrics.ObserveGetDuration(time.Now())
+
 	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementGetError(errs.MetricCategory(err))
 		return LinkGetOutput{}, err
 	}
 
 	link, err := uc.linkRepository.FindByID(ctx, input.ID)
 	if err != nil {
+		uc.applicationMetrics.IncrementGetError(errs.MetricCategory(err))
 		return LinkGetOutput{}, err
 	}
+
+	uc.applicationMetrics.IncrementGetSuccess()
 
 	return LinkGetOutput{
 		ID:          link.ID,
