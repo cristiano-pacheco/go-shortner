@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -149,7 +150,7 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 		resolve *usecase.LinkResolveUseCase
 	)
 
-	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module,
+	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, bricksvalidator.Module,
 		fx.Provide(
 			fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 			fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),

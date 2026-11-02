@@ -5,13 +5,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 )
 
 type LinkGetInput struct {
-	ID int64
+	ID int64 `validate:"gt=0"`
 }
 
 type LinkGetOutput struct {
@@ -26,17 +27,26 @@ type LinkGetOutput struct {
 }
 
 type LinkGetUseCase struct {
+	validator      bricksvalidator.Validator
 	linkRepository port.LinkRepository
 	baseURL        string
 }
 
-func NewLinkGetUseCase(linkRepository port.LinkRepository, cfg config.Config) *LinkGetUseCase {
-	return &LinkGetUseCase{linkRepository: linkRepository, baseURL: strings.TrimRight(cfg.PublicBaseURL, "/")}
+func NewLinkGetUseCase(
+	linkRepository port.LinkRepository,
+	cfg config.Config,
+	validator bricksvalidator.Validator,
+) *LinkGetUseCase {
+	return &LinkGetUseCase{
+		linkRepository: linkRepository,
+		baseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
+		validator:      validator,
+	}
 }
 
 func (uc *LinkGetUseCase) Execute(ctx context.Context, input LinkGetInput) (LinkGetOutput, error) {
-	if input.ID <= 0 {
-		return LinkGetOutput{}, errs.ErrInvalidInput
+	if err := uc.validator.Validate(input); err != nil {
+		return LinkGetOutput{}, err
 	}
 
 	link, err := uc.linkRepository.FindByID(ctx, input.ID)

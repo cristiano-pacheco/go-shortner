@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -165,7 +166,7 @@ func TestPostgresTLSModes(t *testing.T) {
 
 			var create *usecase.LinkCreateUseCase
 
-			app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, fx.Provide(
+			app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, bricksvalidator.Module, fx.Provide(
 				fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 				fx.Annotate(service.NewCodeGeneratorService, fx.As(new(port.CodeGenerator))),
 				fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 )
@@ -11,7 +13,7 @@ import (
 const redirectSnapshotLifetime = 60 * time.Second
 
 type LinkResolveInput struct {
-	Code string
+	Code string `validate:"required"`
 }
 
 type LinkResolveOutput struct {
@@ -19,16 +21,25 @@ type LinkResolveOutput struct {
 }
 
 type LinkResolveUseCase struct {
+	validator      bricksvalidator.Validator
 	linkRepository port.LinkRepository
 	redirectCache  port.RedirectCache
 }
 
-func NewLinkResolveUseCase(linkRepository port.LinkRepository, redirectCache port.RedirectCache) *LinkResolveUseCase {
-	return &LinkResolveUseCase{linkRepository: linkRepository, redirectCache: redirectCache}
+func NewLinkResolveUseCase(
+	linkRepository port.LinkRepository,
+	redirectCache port.RedirectCache,
+	validator bricksvalidator.Validator,
+) *LinkResolveUseCase {
+	return &LinkResolveUseCase{linkRepository: linkRepository, redirectCache: redirectCache, validator: validator}
 }
 
 func (uc *LinkResolveUseCase) Execute(ctx context.Context, input LinkResolveInput) (LinkResolveOutput, error) {
-	if input.Code == "" || input.Code == "api" || input.Code == "health" {
+	if err := uc.validator.Validate(input); err != nil {
+		return LinkResolveOutput{}, err
+	}
+
+	if input.Code == "api" || input.Code == "health" {
 		return LinkResolveOutput{}, errs.ErrLinkNotFound
 	}
 

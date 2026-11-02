@@ -162,7 +162,15 @@ func (s *CreateLinkSuite) TestRejectsOversizedBody() {
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingDestination() {
-	s.rejectedCreate(`{}`, apiKey, "application/json", 400)
+	_, body := s.http.expect(s.T(), http.MethodPost, "/api/v1/links", `{}`, apiKey, "application/json", http.StatusBadRequest)
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &response))
+	s.Equal("invalid_argument", response.Error.Code)
+	s.Empty(s.persistedLinks())
 }
 
 func (s *CreateLinkSuite) TestRejectsRelativeDestination() {

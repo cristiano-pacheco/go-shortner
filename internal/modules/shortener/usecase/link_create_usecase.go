@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
@@ -15,9 +17,9 @@ import (
 const maxCodeAttempts = 5
 
 type LinkCreateInput struct {
-	Destination string
-	Alias       *string
-	ExpiresAt   *time.Time
+	Destination string     `validate:"required"`
+	Alias       *string    `validate:"omitempty,min=3,max=32"`
+	ExpiresAt   *time.Time `validate:"-"`
 }
 
 type LinkCreateOutput struct {
@@ -32,6 +34,7 @@ type LinkCreateOutput struct {
 }
 
 type LinkCreateUseCase struct {
+	validator            bricksvalidator.Validator
 	repository           port.LinkRepository
 	generator            port.CodeGenerator
 	baseURL              string
@@ -42,9 +45,11 @@ func NewLinkCreateUseCase(
 	repository port.LinkRepository,
 	generator port.CodeGenerator,
 	destinationValidator port.DestinationValidator,
+	validator bricksvalidator.Validator,
 	cfg config.Config,
 ) *LinkCreateUseCase {
 	return &LinkCreateUseCase{
+		validator:            validator,
 		repository:           repository,
 		generator:            generator,
 		destinationValidator: destinationValidator,
@@ -53,6 +58,10 @@ func NewLinkCreateUseCase(
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
+	if err := uc.validator.Validate(input); err != nil {
+		return LinkCreateOutput{}, err
+	}
+
 	if err := uc.destinationValidator.Validate(input.Destination); err != nil {
 		return LinkCreateOutput{}, err
 	}
@@ -65,6 +74,10 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 		return LinkCreateOutput{}, errs.ErrInvalidInput
 	}
 
+	return uc.create(ctx, input)
+}
+
+func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
 	for range maxCodeAttempts {
 		code, generateErr := uc.code(input.Alias)
 		if generateErr != nil {

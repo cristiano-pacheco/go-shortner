@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
@@ -28,6 +29,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 	app := fx.New(
 		fx.NopLogger,
 		fx.Provide(config.Load),
+		bricksvalidator.Module,
 		database.Module,
 		redis.Module,
 		shortener.Module,

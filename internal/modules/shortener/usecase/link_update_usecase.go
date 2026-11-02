@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
@@ -12,11 +14,11 @@ import (
 )
 
 type LinkUpdateInput struct {
-	ID           int64
-	Destination  *string
+	ID           int64   `validate:"gt=0"`
+	Destination  *string `validate:"omitempty,required"`
 	Active       *bool
 	SetExpiresAt bool
-	ExpiresAt    *time.Time
+	ExpiresAt    *time.Time `validate:"-"`
 }
 
 type LinkUpdateOutput struct {
@@ -31,6 +33,7 @@ type LinkUpdateOutput struct {
 }
 
 type LinkUpdateUseCase struct {
+	validator            bricksvalidator.Validator
 	linkRepository       port.LinkRepository
 	redirectCache        port.RedirectCache
 	destinationValidator port.DestinationValidator
@@ -41,9 +44,11 @@ func NewLinkUpdateUseCase(
 	linkRepository port.LinkRepository,
 	redirectCache port.RedirectCache,
 	destinationValidator port.DestinationValidator,
+	validator bricksvalidator.Validator,
 	cfg config.Config,
 ) *LinkUpdateUseCase {
 	return &LinkUpdateUseCase{
+		validator:            validator,
 		linkRepository:       linkRepository,
 		redirectCache:        redirectCache,
 		destinationValidator: destinationValidator,
@@ -52,8 +57,8 @@ func NewLinkUpdateUseCase(
 }
 
 func (uc *LinkUpdateUseCase) Execute(ctx context.Context, input LinkUpdateInput) (LinkUpdateOutput, error) {
-	if input.ID <= 0 {
-		return LinkUpdateOutput{}, errs.ErrInvalidInput
+	if err := uc.validator.Validate(input); err != nil {
+		return LinkUpdateOutput{}, err
 	}
 
 	if input.Destination != nil {

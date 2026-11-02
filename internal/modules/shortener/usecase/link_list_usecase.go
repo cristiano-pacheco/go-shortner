@@ -6,14 +6,16 @@ import (
 	"strings"
 	"time"
 
+	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 )
 
 type LinkListInput struct {
-	Page     int
-	PageSize int
+	Page     int `validate:"gte=1"`
+	PageSize int `validate:"gte=1,lte=100"`
 }
 
 type LinkListItem struct {
@@ -35,16 +37,29 @@ type LinkListOutput struct {
 }
 
 type LinkListUseCase struct {
+	validator      bricksvalidator.Validator
 	linkRepository port.LinkRepository
 	baseURL        string
 }
 
-func NewLinkListUseCase(linkRepository port.LinkRepository, cfg config.Config) *LinkListUseCase {
-	return &LinkListUseCase{linkRepository: linkRepository, baseURL: strings.TrimRight(cfg.PublicBaseURL, "/")}
+func NewLinkListUseCase(
+	linkRepository port.LinkRepository,
+	cfg config.Config,
+	validator bricksvalidator.Validator,
+) *LinkListUseCase {
+	return &LinkListUseCase{
+		linkRepository: linkRepository,
+		baseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
+		validator:      validator,
+	}
 }
 
 func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (LinkListOutput, error) {
-	if input.Page < 1 || input.PageSize < 1 || input.PageSize > 100 || input.Page-1 > math.MaxInt/input.PageSize {
+	if err := uc.validator.Validate(input); err != nil {
+		return LinkListOutput{}, err
+	}
+
+	if input.Page-1 > math.MaxInt/input.PageSize {
 		return LinkListOutput{}, errs.ErrInvalidInput
 	}
 
