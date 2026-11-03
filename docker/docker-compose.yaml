@@ -45,6 +45,8 @@ services:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./observability/datasources.yaml:/etc/grafana/provisioning/datasources/shortener.yaml:ro
+      - ./observability/dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/shortener.yaml:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards/shortener:ro
       - grafana_data:/var/lib/grafana
 
   tempo:
