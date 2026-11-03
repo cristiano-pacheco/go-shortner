@@ -34,6 +34,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 		bricksmetrics.Module,
 		database.Module,
 		redis.Module,
+		fx.Invoke(metrics.RegisterPoolMetrics),
 		shortener.Module,
 		httpserver.Module,
 	)

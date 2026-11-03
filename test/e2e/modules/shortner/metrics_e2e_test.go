@@ -426,3 +426,90 @@ func TestCodeGenerationMetrics(t *testing.T) {
 		}
 	}
 }
+
+//nolint:paralleltest // Requests share an isolated Compose stack and stop its PostgreSQL service.
+func TestPersistenceMetrics(t *testing.T) {
+	stack := start(t)
+	initialMetrics := stack.httpMetrics(t)
+
+	type requestCase struct {
+		method, path, body, key, media string
+		operation, result              string
+		status                         int
+	}
+	cases := []requestCase{
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"persistence-metric"}`, apiKey, "application/json", "create", "success", http.StatusCreated},
+		{http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/private","alias":"persistence-metric"}`, apiKey, "application/json", "create", "duplicate", http.StatusConflict},
+		{http.MethodGet, "/api/v1/links/1", "", apiKey, "", "find_by_id", "success", http.StatusOK},
+		{http.MethodGet, "/api/v1/links/999999", "", apiKey, "", "find_by_id", "not_found", http.StatusNotFound},
+		{http.MethodGet, "/persistence-metric", "", "", "", "find_by_code", "success", http.StatusFound},
+		{http.MethodGet, "/missing-persistence-metric", "", "", "", "find_by_code", "not_found", http.StatusNotFound},
+		{http.MethodGet, "/api/v1/links", "", apiKey, "", "list", "success", http.StatusOK},
+		{http.MethodPatch, "/api/v1/links/1", `{"destination":"https://example.org/updated"}`, apiKey, "application/json", "update", "success", http.StatusOK},
+		{http.MethodPatch, "/api/v1/links/999999", `{"active":false}`, apiKey, "application/json", "update", "not_found", http.StatusNotFound},
+		{http.MethodDelete, "/api/v1/links/1", "", apiKey, "", "delete", "success", http.StatusNoContent},
+		{http.MethodDelete, "/api/v1/links/1", "", apiKey, "", "delete", "not_found", http.StatusNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%s_%s_%d", tc.method, tc.path, tc.status), func(t *testing.T) {
+			before := stack.httpMetrics(t)
+			stack.expect(t, tc.method, tc.path, tc.body, tc.key, tc.media, tc.status)
+			after := stack.httpMetrics(t)
+			assertPersistenceMetricDelta(t, before, after, tc.operation, tc.result)
+		})
+	}
+
+	poolMetrics := stack.httpMetrics(t)
+	postgresLabels := map[string]string{"db_name": "postgres"}
+	for _, name := range []string{
+		"go_sql_max_open_connections", "go_sql_open_connections", "go_sql_in_use_connections",
+		"go_sql_idle_connections", "go_sql_wait_count_total", "go_sql_wait_duration_seconds_total",
+	} {
+		require.NotNil(t, poolMetrics.find(name, postgresLabels), name)
+	}
+	require.Equal(t, 10.0, poolMetrics.value("go_sql_max_open_connections", postgresLabels))
+	require.Greater(t, poolMetrics.value("go_sql_open_connections", postgresLabels), 0.0)
+	require.Equal(t, poolMetrics.value("go_sql_open_connections", postgresLabels),
+		poolMetrics.value("go_sql_in_use_connections", postgresLabels)+poolMetrics.value("go_sql_idle_connections", postgresLabels))
+
+	for _, name := range []string{
+		"shortener_redis_pool_connections", "shortener_redis_pool_idle_connections", "shortener_redis_pool_pending_requests",
+		"shortener_redis_pool_hits_total", "shortener_redis_pool_misses_total", "shortener_redis_pool_timeouts_total",
+	} {
+		require.NotNil(t, poolMetrics.find(name, nil), name)
+	}
+	require.Greater(t, poolMetrics.value("shortener_redis_pool_connections", nil), 0.0)
+	require.Greater(t, poolMetrics.value("shortener_redis_pool_hits_total", nil), initialMetrics.value("shortener_redis_pool_hits_total", nil),
+		"application Redis operations must use the observed connection pool")
+
+	out, err := stack.run("stop", "postgres")
+	require.NoError(t, err, "%s", out)
+	before := stack.httpMetrics(t)
+	stack.expect(t, http.MethodGet, "/api/v1/links/999998", "", apiKey, "", http.StatusInternalServerError)
+	after := stack.httpMetrics(t)
+	assertPersistenceMetricDelta(t, before, after, "find_by_id", "error")
+
+	for name, family := range after {
+		if !strings.HasPrefix(name, "shortener_repository_") {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				for _, secret := range []string{"persistence-metric", "example.com", "example.org", apiKey, "999998"} {
+					require.NotContains(t, label.GetValue(), secret)
+				}
+			}
+		}
+	}
+}
+
+func assertPersistenceMetricDelta(t *testing.T, before, after httpMetricFamilies, operation, result string) {
+	t.Helper()
+
+	labels := map[string]string{"operation": operation, "result": result}
+	for _, name := range []string{"shortener_repository_operations_total", "shortener_repository_operation_duration_seconds"} {
+		require.Equal(t, before.value(name, labels)+1, after.value(name, labels), name)
+		require.Equal(t, before.total(name)+1, after.total(name), name)
+	}
+}

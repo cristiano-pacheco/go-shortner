@@ -14,36 +14,38 @@ const (
 )
 
 type Metrics struct {
-	httpRequests       *prometheus.CounterVec
-	httpDuration       *prometheus.HistogramVec
-	httpInFlight       *prometheus.GaugeVec
-	createSuccess      prometheus.Counter
-	createErrors       *prometheus.CounterVec
-	createDuration     prometheus.Histogram
-	getSuccess         prometheus.Counter
-	getErrors          *prometheus.CounterVec
-	getDuration        prometheus.Histogram
-	listSuccess        prometheus.Counter
-	listErrors         *prometheus.CounterVec
-	listDuration       prometheus.Histogram
-	updateSuccess      prometheus.Counter
-	updateErrors       *prometheus.CounterVec
-	updateDuration     prometheus.Histogram
-	deleteSuccess      prometheus.Counter
-	deleteErrors       *prometheus.CounterVec
-	deleteDuration     prometheus.Histogram
-	resolveSuccess     prometheus.Counter
-	resolveErrors      *prometheus.CounterVec
-	resolveDuration    prometheus.Histogram
-	cacheOperations    *prometheus.CounterVec
-	cacheDuration      *prometheus.HistogramVec
-	cacheDecisions     *prometheus.CounterVec
-	cacheFailures      *prometheus.CounterVec
-	resolutionSources  *prometheus.CounterVec
-	freshnessRetries   prometheus.Counter
-	generationAttempts *prometheus.CounterVec
-	generationDuration *prometheus.HistogramVec
-	codeCreationEvents *prometheus.CounterVec
+	httpRequests         *prometheus.CounterVec
+	httpDuration         *prometheus.HistogramVec
+	httpInFlight         *prometheus.GaugeVec
+	createSuccess        prometheus.Counter
+	createErrors         *prometheus.CounterVec
+	createDuration       prometheus.Histogram
+	getSuccess           prometheus.Counter
+	getErrors            *prometheus.CounterVec
+	getDuration          prometheus.Histogram
+	listSuccess          prometheus.Counter
+	listErrors           *prometheus.CounterVec
+	listDuration         prometheus.Histogram
+	updateSuccess        prometheus.Counter
+	updateErrors         *prometheus.CounterVec
+	updateDuration       prometheus.Histogram
+	deleteSuccess        prometheus.Counter
+	deleteErrors         *prometheus.CounterVec
+	deleteDuration       prometheus.Histogram
+	resolveSuccess       prometheus.Counter
+	resolveErrors        *prometheus.CounterVec
+	resolveDuration      prometheus.Histogram
+	cacheOperations      *prometheus.CounterVec
+	cacheDuration        *prometheus.HistogramVec
+	cacheDecisions       *prometheus.CounterVec
+	cacheFailures        *prometheus.CounterVec
+	resolutionSources    *prometheus.CounterVec
+	freshnessRetries     prometheus.Counter
+	generationAttempts   *prometheus.CounterVec
+	generationDuration   *prometheus.HistogramVec
+	codeCreationEvents   *prometheus.CounterVec
+	repositoryOperations *prometheus.CounterVec
+	repositoryDuration   *prometheus.HistogramVec
 }
 
 func NewRegistry() (*prometheus.Registry, error) {
@@ -220,6 +222,21 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 			},
 			[]string{resultLabel},
 		),
+		repositoryOperations: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "shortener_repository_operations_total",
+				Help: "Repository operations by result.",
+			},
+			[]string{operationLabel, resultLabel},
+		),
+		repositoryDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "shortener_repository_operation_duration_seconds",
+				Help:    "Repository operation duration in seconds; list includes count and data reads.",
+				Buckets: useCaseBuckets,
+			},
+			[]string{operationLabel, resultLabel},
+		),
 		codeCreationEvents: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "shortener_code_creation_events_total",
@@ -260,6 +277,8 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 		metrics.generationAttempts,
 		metrics.generationDuration,
 		metrics.codeCreationEvents,
+		metrics.repositoryOperations,
+		metrics.repositoryDuration,
 	}
 	for index, collector := range collectors {
 		if err := registerer.Register(collector); err != nil {
@@ -354,6 +373,11 @@ func (m *Metrics) IncrementResolveSuccess() {
 
 func (m *Metrics) IncrementResolveError(category string) {
 	m.resolveErrors.WithLabelValues(m.errorCategory(category)).Inc()
+}
+
+func (m *Metrics) ObserveRepositoryOperation(operation, result string, startedAt time.Time) {
+	m.repositoryOperations.WithLabelValues(operation, result).Inc()
+	m.repositoryDuration.WithLabelValues(operation, result).Observe(time.Since(startedAt).Seconds())
 }
 
 func (m *Metrics) ObserveCacheOperation(operation, result string, startedAt time.Time) {
