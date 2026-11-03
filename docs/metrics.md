@@ -37,3 +37,17 @@ combined theoretical HTTP maximum is 45,900 series per instance. Normal use
 creates only the label combinations observed in traffic. Together with the
 proposed use-case budget, the maximum is 46,038 series, excluding dependency,
 pool, Go and process metrics.
+
+Cache operation duration uses the same 14 finite buckets as use-case duration.
+GET has success, miss and error results. SET and DELETE have success and error
+results. Their seven result combinations each add one counter and 17 histogram
+series, for 126 series. Seven cache decisions, two failure counters, two
+resolution sources and one freshness retry counter add 12 more. The maximum
+for these cache and resolution metrics is 138 series per instance. The combined
+HTTP, use-case, cache and resolution budget is 46,176 series, excluding pool,
+Go and process metrics.
+
+Each cache read records one decision. Precedence is invalid encoding, Redis
+error, miss, stale, inactive, invalid destination, expired, then usable hit.
+Operation metrics measure Redis commands, not connection-pool hits. A cache
+fill skipped because its deadline has passed does not count as a SET.

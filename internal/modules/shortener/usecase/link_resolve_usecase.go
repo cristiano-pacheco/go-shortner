@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
@@ -60,6 +61,8 @@ func (uc *LinkResolveUseCase) Execute(
 
 	if snapshot, ok := uc.cachedSnapshot(ctx, input.Code); ok {
 		uc.applicationMetrics.IncrementResolveSuccess()
+		uc.applicationMetrics.IncrementResolutionSource("cache")
+
 		return LinkResolveOutput{Destination: snapshot.Destination}, nil
 	}
 
@@ -72,18 +75,42 @@ func (uc *LinkResolveUseCase) Execute(
 			}
 
 			uc.applicationMetrics.IncrementResolveSuccess()
+			uc.applicationMetrics.IncrementResolutionSource("database")
 
 			return output, nil
 		}
+
+		uc.applicationMetrics.IncrementFreshnessRetry()
 	}
 }
 
 func (uc *LinkResolveUseCase) cachedSnapshot(ctx context.Context, code string) (port.RedirectSnapshot, bool) {
 	snapshot, hit, err := uc.redirectCache.Get(ctx, code)
 
+	// Precedence is invalid encoding, error, miss, stale, inactive, invalid, expired, hit.
+	decision := "hit"
+
 	now := time.Now().UTC()
-	if err != nil || !hit || !snapshot.FreshUntil.After(now) || !snapshot.Active ||
-		snapshot.Destination == "" || (snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now)) {
+	switch {
+	case errors.Is(err, errs.ErrInvalidSnapshot):
+		decision = "invalid"
+	case err != nil:
+		decision = "error"
+	case !hit:
+		decision = "miss"
+	case !snapshot.FreshUntil.After(now):
+		decision = "stale"
+	case !snapshot.Active:
+		decision = "inactive"
+	case snapshot.Destination == "":
+		decision = "invalid"
+	case snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now):
+		decision = "expired"
+	}
+
+	uc.applicationMetrics.IncrementCacheDecision(decision)
+
+	if decision != "hit" {
 		return port.RedirectSnapshot{}, false
 	}
 
@@ -107,12 +134,15 @@ func (uc *LinkResolveUseCase) resolveFromDatabase(ctx context.Context, code stri
 		return LinkResolveOutput{}, false, errs.ErrLinkNotFound
 	}
 
-	_ = uc.redirectCache.Set(ctx, code, port.RedirectSnapshot{
+	err = uc.redirectCache.Set(ctx, code, port.RedirectSnapshot{
 		Destination: link.Destination,
 		Active:      link.Active,
 		ExpiresAt:   link.ExpiresAt,
 		FreshUntil:  freshUntil,
 	})
+	if err != nil {
+		uc.applicationMetrics.IncrementCacheFailure("fill")
+	}
 
 	now := time.Now().UTC()
 	if !freshUntil.After(now) {

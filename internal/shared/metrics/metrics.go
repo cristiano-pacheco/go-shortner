@@ -8,28 +8,39 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
+const (
+	CacheResultSuccess = "success"
+	CacheResultError   = "error"
+)
+
 type Metrics struct {
-	httpRequests    *prometheus.CounterVec
-	httpDuration    *prometheus.HistogramVec
-	httpInFlight    *prometheus.GaugeVec
-	createSuccess   prometheus.Counter
-	createErrors    *prometheus.CounterVec
-	createDuration  prometheus.Histogram
-	getSuccess      prometheus.Counter
-	getErrors       *prometheus.CounterVec
-	getDuration     prometheus.Histogram
-	listSuccess     prometheus.Counter
-	listErrors      *prometheus.CounterVec
-	listDuration    prometheus.Histogram
-	updateSuccess   prometheus.Counter
-	updateErrors    *prometheus.CounterVec
-	updateDuration  prometheus.Histogram
-	deleteSuccess   prometheus.Counter
-	deleteErrors    *prometheus.CounterVec
-	deleteDuration  prometheus.Histogram
-	resolveSuccess  prometheus.Counter
-	resolveErrors   *prometheus.CounterVec
-	resolveDuration prometheus.Histogram
+	httpRequests      *prometheus.CounterVec
+	httpDuration      *prometheus.HistogramVec
+	httpInFlight      *prometheus.GaugeVec
+	createSuccess     prometheus.Counter
+	createErrors      *prometheus.CounterVec
+	createDuration    prometheus.Histogram
+	getSuccess        prometheus.Counter
+	getErrors         *prometheus.CounterVec
+	getDuration       prometheus.Histogram
+	listSuccess       prometheus.Counter
+	listErrors        *prometheus.CounterVec
+	listDuration      prometheus.Histogram
+	updateSuccess     prometheus.Counter
+	updateErrors      *prometheus.CounterVec
+	updateDuration    prometheus.Histogram
+	deleteSuccess     prometheus.Counter
+	deleteErrors      *prometheus.CounterVec
+	deleteDuration    prometheus.Histogram
+	resolveSuccess    prometheus.Counter
+	resolveErrors     *prometheus.CounterVec
+	resolveDuration   prometheus.Histogram
+	cacheOperations   *prometheus.CounterVec
+	cacheDuration     *prometheus.HistogramVec
+	cacheDecisions    *prometheus.CounterVec
+	cacheFailures     *prometheus.CounterVec
+	resolutionSources *prometheus.CounterVec
+	freshnessRetries  prometheus.Counter
 }
 
 func NewRegistry() (*prometheus.Registry, error) {
@@ -48,9 +59,10 @@ func NewRegistry() (*prometheus.Registry, error) {
 //nolint:funlen // Each metric is declared explicitly in the shared registry.
 func New(registerer prometheus.Registerer) (*Metrics, error) {
 	const (
-		methodLabel   = "method"
-		routeLabel    = "route"
-		categoryLabel = "category"
+		methodLabel    = "method"
+		routeLabel     = "route"
+		categoryLabel  = "category"
+		operationLabel = "operation"
 	)
 
 	useCaseBuckets := []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 30}
@@ -153,6 +165,42 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 			Help:    "Resolve execution duration in seconds.",
 			Buckets: useCaseBuckets,
 		}),
+		cacheOperations: prometheus.NewCounterVec(
+			prometheus.CounterOpts{Name: "shortener_cache_operations_total", Help: "Cache operations by result."},
+			[]string{operationLabel, "result"},
+		),
+		cacheDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "shortener_cache_operation_duration_seconds",
+				Help:    "Cache operation duration in seconds.",
+				Buckets: useCaseBuckets,
+			},
+			[]string{operationLabel, "result"},
+		),
+		cacheDecisions: prometheus.NewCounterVec(
+			prometheus.CounterOpts{Name: "shortener_cache_decisions_total", Help: "Redirect cache read decisions."},
+			[]string{"decision"},
+		),
+		cacheFailures: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "shortener_cache_failures_total",
+				Help: "Failed cache fills and invalidations.",
+			},
+			[]string{operationLabel},
+		),
+		resolutionSources: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "shortener_resolution_success_total",
+				Help: "Successful resolutions by source.",
+			},
+			[]string{"source"},
+		),
+		freshnessRetries: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "shortener_resolution_freshness_retries_total",
+				Help: "Resolution retries after the freshness window expires.",
+			},
+		),
 	}
 
 	collectors := []prometheus.Collector{
@@ -177,6 +225,12 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 		metrics.resolveSuccess,
 		metrics.resolveErrors,
 		metrics.resolveDuration,
+		metrics.cacheOperations,
+		metrics.cacheDuration,
+		metrics.cacheDecisions,
+		metrics.cacheFailures,
+		metrics.resolutionSources,
+		metrics.freshnessRetries,
 	}
 	for index, collector := range collectors {
 		if err := registerer.Register(collector); err != nil {
@@ -271,6 +325,27 @@ func (m *Metrics) IncrementResolveSuccess() {
 
 func (m *Metrics) IncrementResolveError(category string) {
 	m.resolveErrors.WithLabelValues(m.errorCategory(category)).Inc()
+}
+
+func (m *Metrics) ObserveCacheOperation(operation, result string, startedAt time.Time) {
+	m.cacheOperations.WithLabelValues(operation, result).Inc()
+	m.cacheDuration.WithLabelValues(operation, result).Observe(time.Since(startedAt).Seconds())
+}
+
+func (m *Metrics) IncrementCacheDecision(decision string) {
+	m.cacheDecisions.WithLabelValues(decision).Inc()
+}
+
+func (m *Metrics) IncrementCacheFailure(operation string) {
+	m.cacheFailures.WithLabelValues(operation).Inc()
+}
+
+func (m *Metrics) IncrementResolutionSource(source string) {
+	m.resolutionSources.WithLabelValues(source).Inc()
+}
+
+func (m *Metrics) IncrementFreshnessRetry() {
+	m.freshnessRetries.Inc()
 }
 
 func (m *Metrics) errorCategory(category string) string {

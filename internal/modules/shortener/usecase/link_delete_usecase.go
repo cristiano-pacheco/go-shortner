@@ -52,7 +52,9 @@ func (uc *LinkDeleteUseCase) Execute(ctx context.Context, input LinkDeleteInput)
 		return LinkDeleteOutput{}, err
 	}
 
-	_ = uc.redirectCache.Delete(ctx, link.Code)
+	if cacheErr := uc.redirectCache.Delete(ctx, link.Code); cacheErr != nil {
+		uc.applicationMetrics.IncrementCacheFailure("invalidation")
+	}
 
 	uc.applicationMetrics.IncrementDeleteSuccess()
 

@@ -100,7 +100,9 @@ func (uc *LinkUpdateUseCase) Execute(ctx context.Context, input LinkUpdateInput)
 		return LinkUpdateOutput{}, err
 	}
 
-	_ = uc.redirectCache.Delete(ctx, link.Code)
+	if cacheErr := uc.redirectCache.Delete(ctx, link.Code); cacheErr != nil {
+		uc.applicationMetrics.IncrementCacheFailure("invalidation")
+	}
 
 	uc.applicationMetrics.IncrementUpdateSuccess()
 
