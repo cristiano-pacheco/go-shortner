@@ -8,7 +8,7 @@ The default public address is `http://localhost:8080`. If you change `APP_PORT`,
 
 ## Set up the project
 
-Run `make setup` from the repository root. It creates `.env` if needed, starts PostgreSQL and Redis, applies migrations, starts the application and seeds example links. It leaves existing configuration and database data intact. The seed creates `example-go`, `example-postgres` and `example-redis`, skipping any code already reserved. Repeating setup does not overwrite links. The setup requires `openssl` and `curl`. When creating `.env`, unset any inherited `API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB` values.
+Run `make setup` from the repository root. It creates `.env` if needed, starts PostgreSQL and Redis, applies migrations, starts the application and observability services, and seeds example links. It leaves existing configuration and database data intact. The seed creates `example-go`, `example-postgres` and `example-redis`, skipping any code already reserved. Repeating setup does not overwrite links. The setup requires `openssl` and `curl`. When creating `.env`, unset any inherited `API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB` values.
 
 ## Run with Docker Compose
 
@@ -28,7 +28,7 @@ docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-co
 
 ## Local observability services
 
-The observability stack is optional and does not start with `make setup`. Start it on the same Compose network as the application:
+`make setup` starts Prometheus, Grafana and Tempo alongside the application. To start only the observability services after the application is running, use:
 
 ```sh
 docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml --profile observability up -d prometheus grafana tempo
@@ -36,7 +36,7 @@ docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-co
 
 Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`. Set `GRAFANA_PORT` or `PROMETHEUS_PORT` to change those localhost-only ports. Grafana's local default login is `admin` / `admin`; change the password when prompted. Prometheus and Tempo datasources are provisioned as `prometheus` and `tempo`. This local configuration is not intended for internet exposure.
 
-Prometheus scrapes `app:9090` on the Compose network. Tempo accepts OTLP gRPC at `tempo:4317` and OTLP HTTP at `tempo:4318` on that network. The application does not yet expose metrics or export traces; those integrations are separate work. Neither service is required for application startup.
+Prometheus scrapes `app:9090` on the Compose network. Tempo accepts OTLP gRPC at `tempo:4317` and OTLP HTTP at `tempo:4318` on that network. The application exposes metrics on its administrative listener. Trace export is separate work. Neither service is required for application startup.
 
 Stop these services with the same Compose files and `down`, or use `make docker-down` to stop the whole project. Named Prometheus, Grafana and Tempo volumes remain after `down`. Add `-v` to the Compose `down` command with the observability profile enabled to remove those volumes and the PostgreSQL volume. Prometheus retains data for 15 days, and Tempo retains trace blocks for 24 hours.
 

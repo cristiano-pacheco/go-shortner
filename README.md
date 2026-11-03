@@ -21,6 +21,8 @@ Install Docker and Docker Compose. Then set up the application and example links
 make setup
 ```
 
+The command also starts Prometheus, Grafana and Tempo. Grafana is available at `http://localhost:3000` with the local default login `admin` / `admin`.
+
 The application listens at `http://localhost:8080` by default. Stop the stack with `make docker-down`. For manual startup or host execution with Go 1.27.3, see [operations](docs/operations.md).
 
 ## Documentation

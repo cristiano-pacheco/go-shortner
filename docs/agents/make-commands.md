@@ -8,7 +8,7 @@ Run commands from the repository root. Use the table to select a target, then ch
 | --- | --- |
 | `make` / `make all` | Install development tools, run lint and tests, then generate coverage. Tests run again during coverage. |
 | `make install-libs` | Install golangci-lint, govulncheck, mockery, swag, and nilaway with `go install`. Requires network access and writes to Go's binary directory. |
-| `make setup` | Create `.env` if absent, start Compose dependencies, run migrations, start the app, wait for health, and seed example links. Keeps existing credentials and database data. |
+| `make setup` | Create `.env` if absent, start dependencies, run migrations, start and seed the app, then start Prometheus, Grafana and Tempo. Keeps existing credentials and database data. |
 | `make run` | Start the server with `go run ./main.go server`. |
 | `make migrate` | Build the app image and run migrations in Compose; starts the dependency services and changes the database. |
 | `make migrate-local` | Apply database migrations from the host with `go run ./main.go migrate`; changes the configured database. |

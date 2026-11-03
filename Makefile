@@ -33,6 +33,7 @@ COMPOSE = docker compose --env-file "$(COMPOSE_ENV_FILE)" -f docker/docker-compo
 .PHONY: setup
 setup:
 	@COMPOSE_ENV_FILE="$(COMPOSE_ENV_FILE)" ./scripts/setup.sh
+	$(COMPOSE) --profile observability up -d prometheus grafana tempo
 
 .PHONY: docker-up
 docker-up:
