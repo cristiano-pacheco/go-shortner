@@ -390,3 +390,39 @@ func assertUseCaseMetricDelta(t *testing.T, before, after httpMetricFamilies, op
 		}
 	}
 }
+
+//nolint:paralleltest // Requests share an isolated Compose stack.
+func TestCodeGenerationMetrics(t *testing.T) {
+	stack := start(t)
+	before := stack.httpMetrics(t)
+	_, body := stack.expect(t, http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/generated"}`, apiKey, "application/json", http.StatusCreated)
+	generated := decodeLink(t, body)
+	require.Regexp(t, `^[A-Za-z0-9]{8}$`, generated.Code)
+	after := stack.httpMetrics(t)
+	success := map[string]string{"result": "success"}
+	require.Equal(t, before.value("shortener_code_generation_attempts_total", success)+1, after.value("shortener_code_generation_attempts_total", success))
+	require.Equal(t, before.value("shortener_code_generation_duration_seconds", success)+1, after.value("shortener_code_generation_duration_seconds", success))
+	require.Equal(t, before.total("shortener_code_creation_events_total"), after.total("shortener_code_creation_events_total"))
+
+	stack.expect(t, http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/original","alias":"metric-duplicate"}`, apiKey, "application/json", http.StatusCreated)
+	before = stack.httpMetrics(t)
+	stack.expect(t, http.MethodPost, "/api/v1/links", `{"destination":"https://example.com/other","alias":"metric-duplicate"}`, apiKey, "application/json", http.StatusConflict)
+	after = stack.httpMetrics(t)
+	require.Equal(t, before.total("shortener_code_generation_attempts_total"), after.total("shortener_code_generation_attempts_total"))
+	require.Equal(t, before.total("shortener_code_generation_duration_seconds"), after.total("shortener_code_generation_duration_seconds"))
+	labels := map[string]string{"event": "alias_conflict"}
+	require.Equal(t, before.value("shortener_code_creation_events_total", labels)+1, after.value("shortener_code_creation_events_total", labels))
+	require.Equal(t, before.total("shortener_code_creation_events_total")+1, after.total("shortener_code_creation_events_total"))
+	for name, family := range after {
+		if !strings.HasPrefix(name, "shortener_code_") {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				for _, secret := range []string{generated.Code, "metric-duplicate", "example.com", apiKey} {
+					require.NotContains(t, label.GetValue(), secret)
+				}
+			}
+		}
+	}
+}

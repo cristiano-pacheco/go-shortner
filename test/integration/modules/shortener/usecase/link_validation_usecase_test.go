@@ -4,6 +4,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
@@ -29,14 +31,18 @@ import (
 type LinkValidationUseCaseSuite struct {
 	suite.Suite
 
-	kit                *itestkit.ITestKit
-	registry           *prometheus.Registry
-	linkDeleteUseCase  *usecase.LinkDeleteUseCase
-	linkCreateUseCase  *usecase.LinkCreateUseCase
-	linkGetUseCase     *usecase.LinkGetUseCase
-	linkUpdateUseCase  *usecase.LinkUpdateUseCase
-	linkListUseCase    *usecase.LinkListUseCase
-	linkResolveUseCase *usecase.LinkResolveUseCase
+	kit                  *itestkit.ITestKit
+	registry             *prometheus.Registry
+	applicationMetrics   *metrics.Metrics
+	validator            bricksvalidator.Validator
+	repository           port.LinkRepository
+	destinationValidator port.DestinationValidator
+	linkDeleteUseCase    *usecase.LinkDeleteUseCase
+	linkCreateUseCase    *usecase.LinkCreateUseCase
+	linkGetUseCase       *usecase.LinkGetUseCase
+	linkUpdateUseCase    *usecase.LinkUpdateUseCase
+	linkListUseCase      *usecase.LinkListUseCase
+	linkResolveUseCase   *usecase.LinkResolveUseCase
 }
 
 func TestLinkValidationUseCaseSuite(t *testing.T) {
@@ -74,6 +80,10 @@ func (s *LinkValidationUseCaseSuite) SetupTest() {
 			config.Config{PublicBaseURL: "https://short.example"},
 		),
 		fx.Populate(
+			&s.applicationMetrics,
+			&s.validator,
+			&s.repository,
+			&s.destinationValidator,
 			&s.linkCreateUseCase,
 			&s.linkGetUseCase,
 			&s.linkUpdateUseCase,
@@ -339,4 +349,110 @@ func (s *LinkValidationUseCaseSuite) metricCounts(operation string) (float64, fl
 	}
 
 	return invalid, outcomes, duration
+}
+
+type sequenceGenerator struct {
+	codes []string
+	calls int
+	err   error
+}
+
+func (g *sequenceGenerator) Generate() (string, error) {
+	g.calls++
+	if g.err != nil {
+		return "", g.err
+	}
+
+	return g.codes[(g.calls-1)%len(g.codes)], nil
+}
+
+func (s *LinkValidationUseCaseSuite) TestGeneratedCodeCollisionsAndExhaustion() {
+	ctx := context.Background()
+	alias := "occupied"
+	original, err := s.linkCreateUseCase.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com/original", Alias: &alias})
+	s.Require().NoError(err)
+	_, err = s.linkDeleteUseCase.Execute(ctx, usecase.LinkDeleteInput{ID: original.ID})
+	s.Require().NoError(err)
+
+	generator := &sequenceGenerator{codes: []string{alias, "freecode"}}
+	create := usecase.NewLinkCreateUseCase(s.repository, generator, s.destinationValidator, s.validator, s.applicationMetrics, config.Config{PublicBaseURL: "https://short.example"})
+	attempts := s.generationMetric("shortener_code_generation_attempts_total", "result", "success")
+	duration := s.generationMetric("shortener_code_generation_duration_seconds", "result", "success")
+	collisions := s.generationMetric("shortener_code_creation_events_total", "event", "automatic_collision")
+	exhausted := s.generationMetric("shortener_code_creation_events_total", "event", "retries_exhausted")
+	created, err := create.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com/new"})
+	s.Require().NoError(err)
+	s.Equal("freecode", created.Code)
+	s.Equal(2, generator.calls)
+	s.Equal(attempts+2, s.generationMetric("shortener_code_generation_attempts_total", "result", "success"))
+	s.Equal(duration+2, s.generationMetric("shortener_code_generation_duration_seconds", "result", "success"))
+	s.Equal(collisions+1, s.generationMetric("shortener_code_creation_events_total", "event", "automatic_collision"))
+	stored, err := s.linkGetUseCase.Execute(ctx, usecase.LinkGetInput{ID: created.ID})
+	s.Require().NoError(err)
+	s.Equal(created.Code, stored.Code)
+
+	generator = &sequenceGenerator{codes: []string{alias}}
+	create = usecase.NewLinkCreateUseCase(s.repository, generator, s.destinationValidator, s.validator, s.applicationMetrics, config.Config{PublicBaseURL: "https://short.example"})
+	_, err = create.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com/exhausted"})
+	s.Require().Error(err)
+	s.Equal(5, generator.calls)
+	s.Equal(attempts+7, s.generationMetric("shortener_code_generation_attempts_total", "result", "success"))
+	s.Equal(duration+7, s.generationMetric("shortener_code_generation_duration_seconds", "result", "success"))
+	s.Equal(collisions+6, s.generationMetric("shortener_code_creation_events_total", "event", "automatic_collision"))
+	s.Equal(exhausted+1, s.generationMetric("shortener_code_creation_events_total", "event", "retries_exhausted"))
+	list, err := s.linkListUseCase.Execute(ctx, usecase.LinkListInput{Page: 1, PageSize: 10})
+	s.Require().NoError(err)
+	s.EqualValues(1, list.Total)
+}
+
+func (s *LinkValidationUseCaseSuite) generationMetric(name, labelName, labelValue string) float64 {
+	s.T().Helper()
+	families, err := s.registry.Gather()
+	s.Require().NoError(err)
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				if label.GetName() == labelName && label.GetValue() == labelValue {
+					if metric.GetCounter() != nil {
+						return metric.GetCounter().GetValue()
+					}
+					if metric.GetHistogram() != nil {
+						return float64(metric.GetHistogram().GetSampleCount())
+					}
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func (s *LinkValidationUseCaseSuite) TestGenerationAndPersistenceFailuresAreDistinct() {
+	expected := errors.New("controlled entropy failure")
+	generator := &sequenceGenerator{err: expected}
+	create := usecase.NewLinkCreateUseCase(s.repository, generator, s.destinationValidator, s.validator, s.applicationMetrics, config.Config{PublicBaseURL: "https://short.example"})
+	failure := s.generationMetric("shortener_code_generation_attempts_total", "result", "error")
+	failureDuration := s.generationMetric("shortener_code_generation_duration_seconds", "result", "error")
+	persistence := s.generationMetric("shortener_code_creation_events_total", "event", "persistence_error")
+	_, err := create.Execute(context.Background(), usecase.LinkCreateInput{Destination: "https://example.com"})
+	s.ErrorIs(err, expected)
+	s.Equal(1, generator.calls)
+	s.Equal(failure+1, s.generationMetric("shortener_code_generation_attempts_total", "result", "error"))
+	s.Equal(failureDuration+1, s.generationMetric("shortener_code_generation_duration_seconds", "result", "error"))
+	s.Equal(persistence, s.generationMetric("shortener_code_creation_events_total", "event", "persistence_error"))
+
+	generator = &sequenceGenerator{codes: []string{"freecode"}}
+	create = usecase.NewLinkCreateUseCase(s.repository, generator, s.destinationValidator, s.validator, s.applicationMetrics, config.Config{PublicBaseURL: "https://short.example"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = create.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com"})
+	s.Require().Error(err)
+	s.Equal(1, generator.calls)
+	s.Equal(failure+1, s.generationMetric("shortener_code_generation_attempts_total", "result", "error"))
+	s.Equal(persistence+1, s.generationMetric("shortener_code_creation_events_total", "event", "persistence_error"))
+	list, err := s.linkListUseCase.Execute(context.Background(), usecase.LinkListInput{Page: 1, PageSize: 10})
+	s.Require().NoError(err)
+	s.Zero(list.Total)
 }

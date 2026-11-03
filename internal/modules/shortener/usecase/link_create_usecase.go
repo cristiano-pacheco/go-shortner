@@ -106,11 +106,19 @@ func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) 
 			ctx,
 			model.LinkModel{Code: code, Destination: input.Destination, Active: true, ExpiresAt: input.ExpiresAt},
 		)
-		if errors.Is(createErr, errs.ErrCodeConflict) && input.Alias == nil {
-			continue
+		if errors.Is(createErr, errs.ErrCodeConflict) {
+			if input.Alias == nil {
+				uc.applicationMetrics.IncrementAutomaticCollision()
+				continue
+			}
+
+			uc.applicationMetrics.IncrementAliasConflict()
+
+			return LinkCreateOutput{}, createErr
 		}
 
 		if createErr != nil {
+			uc.applicationMetrics.IncrementCodePersistenceError()
 			return LinkCreateOutput{}, createErr
 		}
 
@@ -125,6 +133,8 @@ func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) 
 			UpdatedAt:   link.UpdatedAt,
 		}, nil
 	}
+
+	uc.applicationMetrics.IncrementCodeRetriesExhausted()
 
 	return LinkCreateOutput{}, errors.New("automatic code generation exhausted retries")
 }
@@ -149,7 +159,11 @@ func (uc *LinkCreateUseCase) code(alias *string) (string, error) {
 		return *alias, nil
 	}
 
-	return uc.generator.Generate()
+	startedAt := time.Now()
+	code, err := uc.generator.Generate()
+	uc.applicationMetrics.ObserveCodeGeneration(startedAt, err)
+
+	return code, err
 }
 
 func (uc *LinkCreateUseCase) validAlias(alias string) bool {

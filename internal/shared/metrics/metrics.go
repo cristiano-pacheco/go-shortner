@@ -14,33 +14,36 @@ const (
 )
 
 type Metrics struct {
-	httpRequests      *prometheus.CounterVec
-	httpDuration      *prometheus.HistogramVec
-	httpInFlight      *prometheus.GaugeVec
-	createSuccess     prometheus.Counter
-	createErrors      *prometheus.CounterVec
-	createDuration    prometheus.Histogram
-	getSuccess        prometheus.Counter
-	getErrors         *prometheus.CounterVec
-	getDuration       prometheus.Histogram
-	listSuccess       prometheus.Counter
-	listErrors        *prometheus.CounterVec
-	listDuration      prometheus.Histogram
-	updateSuccess     prometheus.Counter
-	updateErrors      *prometheus.CounterVec
-	updateDuration    prometheus.Histogram
-	deleteSuccess     prometheus.Counter
-	deleteErrors      *prometheus.CounterVec
-	deleteDuration    prometheus.Histogram
-	resolveSuccess    prometheus.Counter
-	resolveErrors     *prometheus.CounterVec
-	resolveDuration   prometheus.Histogram
-	cacheOperations   *prometheus.CounterVec
-	cacheDuration     *prometheus.HistogramVec
-	cacheDecisions    *prometheus.CounterVec
-	cacheFailures     *prometheus.CounterVec
-	resolutionSources *prometheus.CounterVec
-	freshnessRetries  prometheus.Counter
+	httpRequests       *prometheus.CounterVec
+	httpDuration       *prometheus.HistogramVec
+	httpInFlight       *prometheus.GaugeVec
+	createSuccess      prometheus.Counter
+	createErrors       *prometheus.CounterVec
+	createDuration     prometheus.Histogram
+	getSuccess         prometheus.Counter
+	getErrors          *prometheus.CounterVec
+	getDuration        prometheus.Histogram
+	listSuccess        prometheus.Counter
+	listErrors         *prometheus.CounterVec
+	listDuration       prometheus.Histogram
+	updateSuccess      prometheus.Counter
+	updateErrors       *prometheus.CounterVec
+	updateDuration     prometheus.Histogram
+	deleteSuccess      prometheus.Counter
+	deleteErrors       *prometheus.CounterVec
+	deleteDuration     prometheus.Histogram
+	resolveSuccess     prometheus.Counter
+	resolveErrors      *prometheus.CounterVec
+	resolveDuration    prometheus.Histogram
+	cacheOperations    *prometheus.CounterVec
+	cacheDuration      *prometheus.HistogramVec
+	cacheDecisions     *prometheus.CounterVec
+	cacheFailures      *prometheus.CounterVec
+	resolutionSources  *prometheus.CounterVec
+	freshnessRetries   prometheus.Counter
+	generationAttempts *prometheus.CounterVec
+	generationDuration *prometheus.HistogramVec
+	codeCreationEvents *prometheus.CounterVec
 }
 
 func NewRegistry() (*prometheus.Registry, error) {
@@ -63,6 +66,7 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 		routeLabel     = "route"
 		categoryLabel  = "category"
 		operationLabel = "operation"
+		resultLabel    = "result"
 	)
 
 	useCaseBuckets := []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 30}
@@ -167,7 +171,7 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 		}),
 		cacheOperations: prometheus.NewCounterVec(
 			prometheus.CounterOpts{Name: "shortener_cache_operations_total", Help: "Cache operations by result."},
-			[]string{operationLabel, "result"},
+			[]string{operationLabel, resultLabel},
 		),
 		cacheDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -175,7 +179,7 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 				Help:    "Cache operation duration in seconds.",
 				Buckets: useCaseBuckets,
 			},
-			[]string{operationLabel, "result"},
+			[]string{operationLabel, resultLabel},
 		),
 		cacheDecisions: prometheus.NewCounterVec(
 			prometheus.CounterOpts{Name: "shortener_cache_decisions_total", Help: "Redirect cache read decisions."},
@@ -200,6 +204,28 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 				Name: "shortener_resolution_freshness_retries_total",
 				Help: "Resolution retries after the freshness window expires.",
 			},
+		),
+		generationAttempts: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "shortener_code_generation_attempts_total",
+				Help: "Automatic code generation attempts by result.",
+			},
+			[]string{resultLabel},
+		),
+		generationDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "shortener_code_generation_duration_seconds",
+				Help:    "Automatic code generation duration in seconds.",
+				Buckets: useCaseBuckets,
+			},
+			[]string{resultLabel},
+		),
+		codeCreationEvents: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "shortener_code_creation_events_total",
+				Help: "Code creation conflicts and failures by category.",
+			},
+			[]string{"event"},
 		),
 	}
 
@@ -231,6 +257,9 @@ func New(registerer prometheus.Registerer) (*Metrics, error) {
 		metrics.cacheFailures,
 		metrics.resolutionSources,
 		metrics.freshnessRetries,
+		metrics.generationAttempts,
+		metrics.generationDuration,
+		metrics.codeCreationEvents,
 	}
 	for index, collector := range collectors {
 		if err := registerer.Register(collector); err != nil {
@@ -346,6 +375,32 @@ func (m *Metrics) IncrementResolutionSource(source string) {
 
 func (m *Metrics) IncrementFreshnessRetry() {
 	m.freshnessRetries.Inc()
+}
+
+func (m *Metrics) ObserveCodeGeneration(startedAt time.Time, err error) {
+	result := "success"
+	if err != nil {
+		result = "error"
+	}
+
+	m.generationAttempts.WithLabelValues(result).Inc()
+	m.generationDuration.WithLabelValues(result).Observe(time.Since(startedAt).Seconds())
+}
+
+func (m *Metrics) IncrementAutomaticCollision() {
+	m.codeCreationEvents.WithLabelValues("automatic_collision").Inc()
+}
+
+func (m *Metrics) IncrementAliasConflict() {
+	m.codeCreationEvents.WithLabelValues("alias_conflict").Inc()
+}
+
+func (m *Metrics) IncrementCodeRetriesExhausted() {
+	m.codeCreationEvents.WithLabelValues("retries_exhausted").Inc()
+}
+
+func (m *Metrics) IncrementCodePersistenceError() {
+	m.codeCreationEvents.WithLabelValues("persistence_error").Inc()
 }
 
 func (m *Metrics) errorCategory(category string) string {
