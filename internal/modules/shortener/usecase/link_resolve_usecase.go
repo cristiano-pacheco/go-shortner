@@ -5,7 +5,8 @@ import (
 	"errors"
 	"time"
 
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
@@ -24,7 +25,7 @@ type LinkResolveOutput struct {
 
 type LinkResolveUseCase struct {
 	applicationMetrics *metrics.Metrics
-	validator          bricksvalidator.Validator
+	validator          validator.Validator
 	linkRepository     port.LinkRepository
 	redirectCache      port.RedirectCache
 }
@@ -32,7 +33,7 @@ type LinkResolveUseCase struct {
 func NewLinkResolveUseCase(
 	linkRepository port.LinkRepository,
 	redirectCache port.RedirectCache,
-	validator bricksvalidator.Validator,
+	validator validator.Validator,
 	applicationMetrics *metrics.Metrics,
 ) *LinkResolveUseCase {
 	return &LinkResolveUseCase{
@@ -47,6 +48,9 @@ func (uc *LinkResolveUseCase) Execute(
 	ctx context.Context,
 	input LinkResolveInput,
 ) (LinkResolveOutput, error) {
+	ctx, span := trace.Span(ctx, "LinkResolveUseCase.Execute")
+	defer span.End()
+
 	defer uc.applicationMetrics.ObserveResolveDuration(time.Now())
 
 	if err := uc.validator.Validate(input); err != nil {

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -20,7 +20,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
+	destinationvalidator "github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
@@ -152,7 +152,7 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 		resolve *usecase.LinkResolveUseCase
 	)
 
-	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, bricksvalidator.Module,
+	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, validator.Module,
 		fx.Provide(
 			func() prometheus.Registerer {
 				return prometheus.NewRegistry()
@@ -160,7 +160,7 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 			metrics.New,
 			fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 			fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),
-			fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
+			fx.Annotate(destinationvalidator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
 			func() port.CodeGenerator {
 				return generator
 			},

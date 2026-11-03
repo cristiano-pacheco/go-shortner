@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
@@ -19,7 +20,7 @@ type LinkDeleteOutput struct{}
 
 type LinkDeleteUseCase struct {
 	applicationMetrics *metrics.Metrics
-	validator          bricksvalidator.Validator
+	validator          validator.Validator
 	linkRepository     port.LinkRepository
 	redirectCache      port.RedirectCache
 }
@@ -27,7 +28,7 @@ type LinkDeleteUseCase struct {
 func NewLinkDeleteUseCase(
 	linkRepository port.LinkRepository,
 	redirectCache port.RedirectCache,
-	validator bricksvalidator.Validator,
+	validator validator.Validator,
 	applicationMetrics *metrics.Metrics,
 ) *LinkDeleteUseCase {
 	return &LinkDeleteUseCase{
@@ -39,6 +40,9 @@ func NewLinkDeleteUseCase(
 }
 
 func (uc *LinkDeleteUseCase) Execute(ctx context.Context, input LinkDeleteInput) (LinkDeleteOutput, error) {
+	ctx, span := trace.Span(ctx, "LinkDeleteUseCase.Execute")
+	defer span.End()
+
 	defer uc.applicationMetrics.ObserveDeleteDuration(time.Now())
 
 	if err := uc.validator.Validate(input); err != nil {

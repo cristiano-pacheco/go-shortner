@@ -6,7 +6,8 @@ import (
 	"time"
 
 	bricksmetrics "github.com/cristiano-pacheco/bricks/pkg/http/server/metrics"
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
@@ -20,12 +21,16 @@ import (
 )
 
 func runServer(cmd *cobra.Command, _ []string) (runErr error) {
-	const lifecycleTimeout = 10 * time.Second
+	const (
+		startupTimeout  = 10 * time.Second
+		shutdownTimeout = 20 * time.Second
+	)
 
 	app := fx.New(
 		fx.NopLogger,
 		fx.Provide(config.Load),
-		bricksvalidator.Module,
+		trace.Module,
+		validator.Module,
 		fx.Provide(fx.Annotate(metrics.NewRegistry,
 			fx.As(new(prometheus.Gatherer)),
 			fx.As(new(prometheus.Registerer)),
@@ -42,7 +47,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), lifecycleTimeout)
+	ctx, cancel := context.WithTimeout(cmd.Context(), startupTimeout)
 	err := app.Start(ctx)
 
 	cancel()
@@ -52,7 +57,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 	}
 
 	defer func() {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), lifecycleTimeout)
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer stopCancel()
 
 		runErr = errors.Join(runErr, app.Stop(stopCtx))

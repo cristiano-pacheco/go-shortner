@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
@@ -36,7 +37,7 @@ type LinkCreateOutput struct {
 
 type LinkCreateUseCase struct {
 	applicationMetrics   *metrics.Metrics
-	validator            bricksvalidator.Validator
+	validator            validator.Validator
 	repository           port.LinkRepository
 	generator            port.CodeGenerator
 	baseURL              string
@@ -47,7 +48,7 @@ func NewLinkCreateUseCase(
 	repository port.LinkRepository,
 	generator port.CodeGenerator,
 	destinationValidator port.DestinationValidator,
-	validator bricksvalidator.Validator,
+	validator validator.Validator,
 	applicationMetrics *metrics.Metrics,
 	cfg config.Config,
 ) *LinkCreateUseCase {
@@ -62,6 +63,9 @@ func NewLinkCreateUseCase(
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
+	ctx, span := trace.Span(ctx, "LinkCreateUseCase.Execute")
+	defer span.End()
+
 	defer uc.applicationMetrics.ObserveCreateDuration(time.Now())
 
 	if err := uc.validator.Validate(input); err != nil {

@@ -243,7 +243,7 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 			"-d",
 			"shortener",
 			"-c",
-			"BEGIN; SELECT id FROM links WHERE code = 'drain-inflight' FOR UPDATE; SELECT pg_sleep(3); COMMIT",
+			"BEGIN; SELECT id FROM links WHERE code = 'drain-inflight' FOR UPDATE; SELECT pg_sleep(4.9); COMMIT",
 		)
 		if err != nil {
 			lockDone <- fmt.Errorf("lock fixture: %w: %s", err, out)
@@ -348,7 +348,7 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 		s.FailNow("request completed before lock release", "%+v", got)
 	case err := <-stopDone:
 		s.FailNow("shutdown completed before request", "%v", err)
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(4100 * time.Millisecond):
 	}
 
 	s.Require().NoError(<-lockDone)

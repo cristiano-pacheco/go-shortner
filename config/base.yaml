@@ -1,4 +1,17 @@
 app:
+  open-telemetry:
+    app_name: go-shortner
+    app_version: "1.0.0"
+    trace_enabled: true
+    trace_url: tempo:4317
+    exporter_type: grpc
+    insecure: true
+    sample_rate: 1.0
+    batch_timeout: 2s
+    max_batch_size: 512
+    max_queue_size: 2048
+    export_timeout: 3s
+    shutdown_timeout: 5s
   metrics:
     enabled: true
     address: "0.0.0.0"

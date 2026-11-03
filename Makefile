@@ -95,7 +95,7 @@ test-integration-cover:
 
 .PHONY: test-e2e
 test-e2e:
-	go test -count=1 -v -timeout=10m -tags=e2e ./test/e2e/...
+	bash ./scripts/e2e-test.sh
 
 .PHONY: cover
 cover:

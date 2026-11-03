@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -27,6 +29,9 @@ func NewLinkRepository(database *database.Database, metrics *metrics.Metrics) *L
 }
 
 func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Create")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("create", time.Now(), &resultErr)
 
@@ -46,6 +51,9 @@ func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (mode
 }
 
 func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.FindByID")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("find_by_id", time.Now(), &resultErr)
 
@@ -56,6 +64,9 @@ func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkMode
 }
 
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.FindByCode")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("find_by_code", time.Now(), &resultErr)
 
@@ -71,6 +82,9 @@ func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.Lin
 }
 
 func (r *LinkRepository) List(ctx context.Context, limit, offset int) ([]model.LinkModel, int64, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.List")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("list", time.Now(), &resultErr)
 
@@ -98,6 +112,9 @@ func (r *LinkRepository) Update(
 	id int64,
 	changes model.LinkChanges,
 ) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Update")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("update", time.Now(), &resultErr)
 
@@ -121,6 +138,9 @@ func (r *LinkRepository) Update(
 }
 
 func (r *LinkRepository) Delete(ctx context.Context, id int64) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Delete")
+	defer span.End()
+
 	var resultErr error
 	defer r.observe("delete", time.Now(), &resultErr)
 

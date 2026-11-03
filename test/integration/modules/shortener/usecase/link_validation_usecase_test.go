@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cristiano-pacheco/bricks/pkg/itestkit"
-	bricksvalidator "github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	playgroundvalidator "github.com/go-playground/validator/v10"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
@@ -34,7 +34,7 @@ type LinkValidationUseCaseSuite struct {
 	kit                  *itestkit.ITestKit
 	registry             *prometheus.Registry
 	applicationMetrics   *metrics.Metrics
-	validator            bricksvalidator.Validator
+	validator            validator.Validator
 	repository           port.LinkRepository
 	destinationValidator port.DestinationValidator
 	linkDeleteUseCase    *usecase.LinkDeleteUseCase
@@ -71,7 +71,7 @@ func (s *LinkValidationUseCaseSuite) SetupTest() {
 	app := fx.New(
 		fx.NopLogger,
 		shortener.Module,
-		bricksvalidator.Module,
+		validator.Module,
 		fx.Provide(metrics.New),
 		fx.Supply(fx.Annotate(s.registry, fx.As(new(prometheus.Registerer)))),
 		fx.Supply(

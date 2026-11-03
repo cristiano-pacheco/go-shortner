@@ -32,6 +32,18 @@ var managementStack httpSuite
 //nolint:gochecknoglobals // TestMain cleans up even when startup fails.
 var managementCleanups []func() error
 
+//nolint:gochecknoglobals // All stacks share the build cache for one test run.
+var e2eBuildID = func() string {
+	if id := os.Getenv("SHORTNER_E2E_BUILD_ID"); id != "" {
+		return id
+	}
+
+	return fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
+}()
+
+//nolint:gochecknoglobals // TestMain only cleans up images after a build was attempted.
+var e2eBuildAttempted bool
+
 func TestMain(m *testing.M) {
 	code := m.Run()
 
@@ -39,6 +51,16 @@ func TestMain(m *testing.M) {
 		if err := cleanup(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 
+			code = 1
+		}
+	}
+
+	if e2eBuildAttempted {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		out, err := exec.CommandContext(ctx, "docker", "image", "prune", "-f", "--filter", "label=io.go-shortner.e2e-build="+e2eBuildID).CombinedOutput()
+		cancel()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "remove E2E build images: %v\n%s", err, out)
 			code = 1
 		}
 	}
@@ -72,6 +94,12 @@ func start(t *testing.T) httpSuite {
 func startStack(t *testing.T, shared bool) httpSuite {
 	t.Helper()
 
+	return startConfiguredStack(t, shared, "")
+}
+
+func startConfiguredStack(t *testing.T, shared bool, composeOverride string) httpSuite {
+	t.Helper()
+
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate repository")
@@ -79,6 +107,11 @@ func startStack(t *testing.T, shared bool) httpSuite {
 
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 	project := fmt.Sprintf("shortner-e2e-%d", time.Now().UnixNano())
+	if dir := os.Getenv("SHORTNER_E2E_CLEANUP_DIR"); dir != "" {
+		if err := os.WriteFile(filepath.Join(dir, "project-"+project), nil, 0o600); err != nil {
+			t.Fatalf("register E2E cleanup: %v", err)
+		}
+	}
 
 	env := append(
 		os.Environ(),
@@ -92,6 +125,7 @@ func startStack(t *testing.T, shared bool) httpSuite {
 		"POSTGRES_PORT=0",
 		"REDIS_PORT=0",
 	)
+
 	args := []string{
 		"compose",
 		"-p",
@@ -101,11 +135,21 @@ func startStack(t *testing.T, shared bool) httpSuite {
 		"-f",
 		filepath.Join(root, "docker/docker-compose.app.yaml"),
 	}
+	if composeOverride != "" {
+		args = append(args, "-f", composeOverride)
+	}
+
 	run := func(extra ...string) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, "docker", append(append([]string{}, args...), extra...)...)
+		command := "docker"
+		commandArgs := append(append([]string{}, args...), extra...)
+		if dir := os.Getenv("SHORTNER_E2E_CLEANUP_DIR"); dir != "" {
+			command = "bash"
+			commandArgs = append([]string{filepath.Join(root, "scripts/e2e-compose.sh"), dir, project}, commandArgs...)
+		}
+		cmd := exec.CommandContext(ctx, command, commandArgs...)
 		cmd.Dir = root
 		cmd.Env = env
 
@@ -113,7 +157,7 @@ func startStack(t *testing.T, shared bool) httpSuite {
 	}
 
 	cleanup := func() error {
-		out, err := run("down", "--volumes", "--remove-orphans")
+		out, err := run("down", "--volumes", "--remove-orphans", "--rmi", "local")
 		if err != nil {
 			return fmt.Errorf("compose cleanup: %w\n%s", err, out)
 		}
@@ -130,7 +174,11 @@ func startStack(t *testing.T, shared bool) httpSuite {
 		})
 	}
 
-	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "app"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app"}} {
+	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "--build-arg", "E2E_BUILD_ID=" + e2eBuildID, "app"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app"}} {
+		if step[0] == "build" {
+			e2eBuildAttempted = true
+		}
+
 		if out, err := run(step...); err != nil {
 			t.Fatalf("compose %v: %v\n%s", step, err, out)
 		}

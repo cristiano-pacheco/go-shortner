@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+
 	"github.com/redis/go-redis/v9"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
@@ -29,6 +31,9 @@ func NewRedirectCache(redisClient *sharedredis.Client, applicationMetrics *metri
 }
 
 func (c *RedirectCache) Get(ctx context.Context, code string) (port.RedirectSnapshot, bool, error) {
+	ctx, span := trace.Span(ctx, "RedirectCache.Get")
+	defer span.End()
+
 	ctx, cancel := context.WithTimeout(ctx, redirectCacheTimeout)
 	defer cancel()
 
@@ -61,6 +66,9 @@ func (c *RedirectCache) Get(ctx context.Context, code string) (port.RedirectSnap
 }
 
 func (c *RedirectCache) Set(ctx context.Context, code string, snapshot port.RedirectSnapshot) error {
+	ctx, span := trace.Span(ctx, "RedirectCache.Set")
+	defer span.End()
+
 	deadline := snapshot.FreshUntil
 	if snapshot.ExpiresAt != nil && snapshot.ExpiresAt.Before(deadline) {
 		deadline = *snapshot.ExpiresAt
@@ -92,6 +100,9 @@ func (c *RedirectCache) Set(ctx context.Context, code string, snapshot port.Redi
 }
 
 func (c *RedirectCache) Delete(ctx context.Context, code string) error {
+	ctx, span := trace.Span(ctx, "RedirectCache.Delete")
+	defer span.End()
+
 	ctx, cancel := context.WithTimeout(ctx, redirectCacheTimeout)
 	defer cancel()
 
