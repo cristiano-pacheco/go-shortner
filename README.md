@@ -34,6 +34,7 @@ The application creates spans for use cases, repository methods and Redis cache 
 ## Documentation
 
 - [Operations](docs/operations.md): configuration, local execution, Compose and checks.
+- [Metrics](docs/metrics.md): metric meanings, histogram buckets and series budgets.
 - [HTTP API](docs/api.md): authentication, endpoints and curl examples.
 - [Architecture](docs/architecture.md): module boundaries and cache consistency.
 - [Glossary](GLOSSARY.md): domain terms and their [code locations](GLOSSARY-MAP.md).

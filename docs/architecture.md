@@ -4,6 +4,10 @@
 
 The shortener module owns link management and public resolution. Shared infrastructure provides configuration, HTTP, PostgreSQL and Redis without owning link policy. Bricks loads configuration; Fx composes infrastructure, adapters and concrete use cases. HTTP handlers call those use cases without decorators. HTTP DTOs, use-case inputs and outputs, and persistence models have separate contracts. Repositories handle database access, cache adapters handle Redis, and use cases decide availability.
 
+PostgreSQL and Redis have separate Fx modules and lifecycle owners. The repository receives the PostgreSQL resource; the redirect cache receives the Redis client. Both dependencies must be available at startup. The server composes the Bricks validator and tracing modules, an application-owned metrics registry, the administrative metrics listener and the HTTP server. Use cases validate structural inputs with Bricks and retain domain checks for link policy.
+
+The shortener Fx module contributes its embedded SQL files to the `migration_filesystems` group. The migration runner collects that group and rejects duplicate filenames and versions. The explicit `migrate` command runs migrations independently of HTTP startup.
+
 PostgreSQL assigns `BIGSERIAL` management IDs. An eight-byte integer uses less identifier storage than a 16-byte UUID; this is not a measured throughput claim. Public codes are independent of IDs. An unconditional unique constraint reserves each stored code, including after soft deletion.
 
 A single configured API key protects management routes. There are no user accounts or per-link permissions. Public redirect routes do not require the key.
