@@ -315,12 +315,6 @@ func (s *endpointSuite) startStack() {
 	case "TestCreateLinkSuite", "TestDeleteLinkSuite", "TestGetLinkSuite", "TestListLinkSuite", "TestUpdateLinkSuite":
 		if managementStack.base == "" {
 			managementStack = startStack(s.T(), true)
-		} else {
-			out, err := managementStack.run("restart", "app")
-			s.Require().NoError(err, "%s", out)
-			managementStack.base = managementStack.composeAddress(s.T(), "8080")
-			managementStack.metricsBase = managementStack.composeAddress(s.T(), "9090")
-			managementStack.waitReady(s.T())
 		}
 
 		s.http = managementStack

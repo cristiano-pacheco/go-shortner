@@ -4,6 +4,7 @@ package shortner_test
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -33,10 +34,17 @@ func (s *RedirectLinkSuite) assertNotFound(code string) {
 
 func (s *RedirectLinkSuite) redis(args ...string) string {
 	s.T().Helper()
-	out, err := s.http.run(append([]string{"exec", "-T", "redis", "redis-cli", "--raw"}, args...)...)
-	s.Require().NoError(err, "redis: %s", out)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	return strings.TrimSpace(string(out))
+	command := make([]interface{}, len(args))
+	for i, arg := range args {
+		command[i] = arg
+	}
+	value, err := s.redisClient.Do(ctx, command...).Result()
+	s.Require().NoError(err, "redis")
+
+	return fmt.Sprint(value)
 }
 
 func (s *RedirectLinkSuite) TestGetRedirectPreservesDestination() {
@@ -231,58 +239,23 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 	cacheKey := "shortener:redirect:v1:drain-inflight"
 	s.Require().Equal("1", s.redis("EXISTS", cacheKey))
 
-	lockDone := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
 
-	go func() {
-		out, err := s.http.run(
-			"exec",
-			"-T",
-			"postgres",
-			"psql",
-			"-X",
-			"-v",
-			"ON_ERROR_STOP=1",
-			"-U",
-			"shortener",
-			"-d",
-			"shortener",
-			"-c",
-			"BEGIN; SELECT id FROM links WHERE code = 'drain-inflight' FOR UPDATE; SELECT pg_sleep(4.9); COMMIT",
-		)
-		if err != nil {
-			lockDone <- fmt.Errorf("lock fixture: %w: %s", err, out)
-			return
-		}
+	tx, err := s.postgresPool.Begin(ctx)
+	s.Require().NoError(err)
+	defer tx.Rollback(context.Background())
 
-		lockDone <- nil
-	}()
+	_, err = tx.Exec(ctx, "SELECT id FROM links WHERE code = 'drain-inflight' FOR UPDATE")
+	s.Require().NoError(err)
 
 	query := func(statement string) string {
-		out, err := s.http.run(
-			"exec",
-			"-T",
-			"postgres",
-			"psql",
-			"-X",
-			"-A",
-			"-t",
-			"-U",
-			"shortener",
-			"-d",
-			"shortener",
-			"-c",
-			statement,
-		)
-		s.Require().NoError(err, "%s", out)
+		var value string
+		err := s.postgresPool.QueryRow(ctx, statement).Scan(&value)
+		s.Require().NoError(err)
 
-		return strings.TrimSpace(string(out))
+		return value
 	}
-
-	s.Require().Eventually(func() bool {
-		return query(
-			"SELECT count(*) FROM pg_stat_activity WHERE wait_event = 'PgSleep' AND query LIKE '%drain-inflight%'",
-		) == "1"
-	}, 5*time.Second, 100*time.Millisecond)
 
 	type result struct {
 		status int
@@ -320,7 +293,7 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 
 	s.Require().Eventually(func() bool {
 		return query(
-			"SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE %links%'",
+			"SELECT count(*)::text FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE %links%'",
 		) == "1"
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -355,7 +328,7 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 	case <-time.After(4100 * time.Millisecond):
 	}
 
-	s.Require().NoError(<-lockDone)
+	s.Require().NoError(tx.Commit(ctx))
 
 	completed := <-requestDone
 	s.Require().NoError(completed.err)

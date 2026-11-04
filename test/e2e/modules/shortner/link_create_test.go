@@ -3,6 +3,7 @@
 package shortner_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -25,24 +26,14 @@ type persistedLink struct {
 
 func (s *endpointSuite) persistedLinks() []persistedLink {
 	s.T().Helper()
-	out, err := s.http.run(
-		"exec",
-		"-T",
-		"postgres",
-		"psql",
-		"-X",
-		"-A",
-		"-t",
-		"-v",
-		"ON_ERROR_STOP=1",
-		"-U",
-		"shortener",
-		"-d",
-		"shortener",
-		"-c",
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var out []byte
+	err := s.postgresPool.QueryRow(ctx,
 		`SELECT COALESCE(json_agg(row_to_json(l) ORDER BY id), '[]'::json) FROM links l`,
-	)
-	s.Require().NoError(err, "read persisted links: %s", out)
+	).Scan(&out)
+	s.Require().NoError(err, "read persisted links")
 
 	var links []persistedLink
 	s.Require().NoError(json.Unmarshal(out, &links), "database response: %s", out)
