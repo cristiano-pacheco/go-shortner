@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build integration
 
-package shortner_test
+package shortener_test
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -18,9 +20,10 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
+	destinationvalidator "github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
@@ -149,11 +152,15 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 		resolve *usecase.LinkResolveUseCase
 	)
 
-	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module,
+	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, validator.Module,
 		fx.Provide(
+			func() prometheus.Registerer {
+				return prometheus.NewRegistry()
+			},
+			metrics.New,
 			fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 			fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),
-			fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
+			fx.Annotate(destinationvalidator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
 			func() port.CodeGenerator {
 				return generator
 			},

@@ -5,13 +5,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 type LinkGetInput struct {
-	ID int64
+	ID int64 `validate:"gt=0"`
 }
 
 type LinkGetOutput struct {
@@ -26,23 +30,44 @@ type LinkGetOutput struct {
 }
 
 type LinkGetUseCase struct {
-	linkRepository port.LinkRepository
-	baseURL        string
+	applicationMetrics *metrics.Metrics
+	validator          validator.Validator
+	linkRepository     port.LinkRepository
+	baseURL            string
 }
 
-func NewLinkGetUseCase(linkRepository port.LinkRepository, cfg config.Config) *LinkGetUseCase {
-	return &LinkGetUseCase{linkRepository: linkRepository, baseURL: strings.TrimRight(cfg.PublicBaseURL, "/")}
+func NewLinkGetUseCase(
+	linkRepository port.LinkRepository,
+	cfg config.Config,
+	validator validator.Validator,
+	applicationMetrics *metrics.Metrics,
+) *LinkGetUseCase {
+	return &LinkGetUseCase{
+		applicationMetrics: applicationMetrics,
+		linkRepository:     linkRepository,
+		baseURL:            strings.TrimRight(cfg.PublicBaseURL, "/"),
+		validator:          validator,
+	}
 }
 
 func (uc *LinkGetUseCase) Execute(ctx context.Context, input LinkGetInput) (LinkGetOutput, error) {
-	if input.ID <= 0 {
-		return LinkGetOutput{}, errs.ErrInvalidInput
+	ctx, span := trace.Span(ctx, "LinkGetUseCase.Execute")
+	defer span.End()
+
+	defer uc.applicationMetrics.ObserveGetDuration(time.Now())
+
+	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementGetError(errs.MetricCategory(err))
+		return LinkGetOutput{}, err
 	}
 
 	link, err := uc.linkRepository.FindByID(ctx, input.ID)
 	if err != nil {
+		uc.applicationMetrics.IncrementGetError(errs.MetricCategory(err))
 		return LinkGetOutput{}, err
 	}
+
+	uc.applicationMetrics.IncrementGetSuccess()
 
 	return LinkGetOutput{
 		ID:          link.ID,

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	playgroundvalidator "github.com/go-playground/validator/v10"
 
 	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
 	"github.com/cristiano-pacheco/bricks/pkg/http/response"
@@ -65,7 +66,7 @@ func (h *LinkHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	_, err = h.linkDeleteUseCase.Execute(r.Context(), usecase.LinkDeleteInput{ID: id})
 	if err != nil {
 		switch {
-		case errors.Is(err, errs.ErrInvalidInput):
+		case h.isInvalidInput(err):
 			err = errInvalidInput
 		case errors.Is(err, errs.ErrLinkNotFound):
 			err = errLinkNotFound
@@ -106,7 +107,7 @@ func (h *LinkHandler) Update(w http.ResponseWriter, r *http.Request) {
 	output, err := h.linkUpdateUseCase.Execute(r.Context(), input)
 	if err != nil {
 		switch {
-		case errors.Is(err, errs.ErrInvalidInput):
+		case h.isInvalidInput(err):
 			err = errInvalidInput
 		case errors.Is(err, errs.ErrLinkNotFound):
 			err = errLinkNotFound
@@ -172,7 +173,7 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.linkListUseCase.Execute(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, errs.ErrInvalidInput) {
+		if h.isInvalidInput(err) {
 			err = errInvalidInput
 		}
 
@@ -196,7 +197,7 @@ func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 	output, err := h.linkGetUseCase.Execute(r.Context(), usecase.LinkGetInput{ID: id})
 	if err != nil {
 		switch {
-		case errors.Is(err, errs.ErrInvalidInput):
+		case h.isInvalidInput(err):
 			err = errInvalidInput
 		case errors.Is(err, errs.ErrLinkNotFound):
 			err = errLinkNotFound
@@ -244,7 +245,7 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, errs.ErrInvalidInput):
+		case h.isInvalidInput(err):
 			err = errInvalidInput
 		case errors.Is(err, errs.ErrCodeConflict):
 			err = errCodeConflict
@@ -272,4 +273,9 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		h.applicationLogger.Error("write link creation response", logger.Error(err))
 	}
+}
+
+func (h *LinkHandler) isInvalidInput(err error) bool {
+	var validationErrors playgroundvalidator.ValidationErrors
+	return errors.Is(err, errs.ErrInvalidInput) || errors.As(err, &validationErrors)
 }

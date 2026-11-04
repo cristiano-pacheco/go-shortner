@@ -13,6 +13,7 @@ type DeleteLinkSuite struct {
 	endpointSuite
 }
 
+//nolint:paralleltest // Management suites share a Compose stack.
 func TestDeleteLinkSuite(t *testing.T) {
 	suite.Run(t, new(DeleteLinkSuite))
 }

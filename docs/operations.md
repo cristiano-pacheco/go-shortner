@@ -8,7 +8,7 @@ The default public address is `http://localhost:8080`. If you change `APP_PORT`,
 
 ## Set up the project
 
-Run `make setup` from the repository root. It creates `.env` if needed, starts PostgreSQL and Redis, applies migrations, starts the application and seeds example links. It leaves existing configuration and database data intact. The seed creates `example-go`, `example-postgres` and `example-redis`, skipping any code already reserved. Repeating setup does not overwrite links. The setup requires `openssl` and `curl`. When creating `.env`, unset any inherited `API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB` values.
+Run `make setup` from the repository root. It creates `.env` if needed, starts PostgreSQL and Redis, applies migrations, starts the application and observability services, and seeds example links. It leaves existing configuration and database data intact. The seed creates `example-go`, `example-postgres` and `example-redis`, skipping any code already reserved. Repeating setup does not overwrite links. The setup requires `openssl` and `curl`. When creating `.env`, unset any inherited `API_KEY`, `POSTGRES_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB` values.
 
 ## Run with Docker Compose
 
@@ -26,6 +26,37 @@ make docker-run
 docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml down -v
 ```
 
+## Local observability services
+
+`make setup` starts Prometheus, Grafana and Tempo alongside the application. To start only the observability services after the application is running, use:
+
+```sh
+docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml --profile observability up -d prometheus grafana tempo
+```
+
+Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`. Set `GRAFANA_PORT` or `PROMETHEUS_PORT` to change those localhost-only ports. Grafana's local default login is `admin` / `admin`; change the password when prompted. Prometheus and Tempo datasources are provisioned as `prometheus` and `tempo`. This local configuration is not intended for internet exposure.
+
+Prometheus scrapes `app:9090` on the Compose network. The administrative endpoint is also available at `http://localhost:9090/metrics` by default; `METRICS_PORT` changes the host port. It is separate from the public listener. Check the scrape and the Prometheus target with:
+
+```sh
+curl --fail http://localhost:9090/metrics
+curl --fail 'http://localhost:9091/api/v1/targets?state=active'
+```
+
+Open Grafana's **Shortener operations** dashboard, select an instance and time range, and use **Explore traces in Tempo** to search for traces. Generate traffic first, for example `curl -i http://localhost:8080/example-go`. The dashboard can show empty panels when there are no requests; that alone does not indicate an outage. The provisioned datasource and dashboard files are in `docker/observability/`. Grafana reads them at startup without a manual import.
+
+Tempo accepts OTLP gRPC at `tempo:4317` and OTLP HTTP at `tempo:4318` on the Compose network. The application exports traces over gRPC. Neither Prometheus nor Tempo is required for application startup.
+
+Stop these services with the same Compose files and `down`, or use `make docker-down` to stop the whole project. Named Prometheus, Grafana and Tempo volumes remain after `down`. Add `-v` to the Compose `down` command with the observability profile enabled to remove those volumes and the PostgreSQL volume. Prometheus retains data for 15 days, and Tempo retains trace blocks for 24 hours.
+
+## Tracing configuration
+
+The application declares Bricks `trace.Module` in `cmd/server.go`. Bricks initializes and stops the go-otel provider through Fx; application code does not initialize a second provider. `config/base.yaml` supplies `app.open-telemetry`: `trace_enabled`, `trace_url`, `exporter_type`, `insecure`, `sample_rate`, `batch_timeout`, `max_batch_size`, `max_queue_size`, `export_timeout` and `shutdown_timeout`. The supplied configuration enables gRPC export to `tempo:4317`, uses root sampling rate `1.0`, a queue of 2048 spans, a batch size of 512, a 3-second export timeout and a 5-second shutdown timeout. Sampling respects a parent decision; set `sample_rate` between 0 and 1 for root spans. Set `trace_enabled: false` to disable export. Invalid local configuration rejects startup. Export errors, including an unavailable Tempo backend, do not fail business requests. HTTP drains before tracing stops, within the application's 30-second shutdown budget.
+
+Bricks supports independent `app.database.tracing.enabled` and `app.redis.tracing.enabled` switches, both disabled by default. Consumers must also declare the corresponding Bricks instrumentation modules. This application does not currently declare those modules or enable the switches. It creates use-case, repository and cache spans and extracts incoming W3C trace context, but does not create HTTP server spans. Plugin controls can disable SQL and Redis statement capture, but third-party exception or status messages can still contain sensitive details. Do not assume all traces are sanitized.
+
+For contributor work, the local Bricks repository is `/Users/cp/code/lab/go/bricks` and go-otel is `/Users/cp/code/lab/go/go-otel`. `/Users/cp/code/projects/jbn` is an architecture reference, not a dependency or a source of this application's runtime defaults.
+
 ## Run on the host
 
 Set `DATABASE_PASSWORD` in `.env`, then start the dependencies, apply migrations and run the server:
@@ -36,7 +67,7 @@ make migrate-local
 make run
 ```
 
-The host commands source `.env` as a shell file when present. Use only a trusted file with shell-compatible values. Keep `DATABASE_HOST`, `DATABASE_PORT`, `REDIS_URL` and `HTTP_ADDR` set to the host-accessible values in `.env.example`. Stop the server with Ctrl-C and the dependencies with `make docker-down`.
+The host commands source `.env` as a shell file when present. Use only a trusted file with shell-compatible values. Keep `DATABASE_HOST`, `DATABASE_PORT`, `REDIS_URL` and `HTTP_ADDR` set to the host-accessible values in `.env.example`. The supplied trace endpoint is only reachable on the Compose network. For host execution, configure a reachable OTLP endpoint in YAML or disable tracing. Stop the server with Ctrl-C and the dependencies with `make docker-down`.
 
 ## Checks
 

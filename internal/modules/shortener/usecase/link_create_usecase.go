@@ -6,18 +6,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/validator"
+
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 const maxCodeAttempts = 5
 
 type LinkCreateInput struct {
-	Destination string
-	Alias       *string
-	ExpiresAt   *time.Time
+	Destination string     `validate:"required"`
+	Alias       *string    `validate:"omitempty,min=3,max=32"`
+	ExpiresAt   *time.Time `validate:"omitempty,gt"`
 }
 
 type LinkCreateOutput struct {
@@ -32,6 +36,8 @@ type LinkCreateOutput struct {
 }
 
 type LinkCreateUseCase struct {
+	applicationMetrics   *metrics.Metrics
+	validator            validator.Validator
 	repository           port.LinkRepository
 	generator            port.CodeGenerator
 	baseURL              string
@@ -42,9 +48,13 @@ func NewLinkCreateUseCase(
 	repository port.LinkRepository,
 	generator port.CodeGenerator,
 	destinationValidator port.DestinationValidator,
+	validator validator.Validator,
+	applicationMetrics *metrics.Metrics,
 	cfg config.Config,
 ) *LinkCreateUseCase {
 	return &LinkCreateUseCase{
+		applicationMetrics:   applicationMetrics,
+		validator:            validator,
 		repository:           repository,
 		generator:            generator,
 		destinationValidator: destinationValidator,
@@ -53,18 +63,43 @@ func NewLinkCreateUseCase(
 }
 
 func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
+	ctx, span := trace.Span(ctx, "LinkCreateUseCase.Execute")
+	defer span.End()
+
+	defer uc.applicationMetrics.ObserveCreateDuration(time.Now())
+
+	if err := uc.validator.Validate(input); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
+		return LinkCreateOutput{}, err
+	}
+
 	if err := uc.destinationValidator.Validate(input.Destination); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
 		return LinkCreateOutput{}, err
 	}
 
 	if err := uc.normalizeExpiration(&input); err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
 		return LinkCreateOutput{}, err
 	}
 
 	if input.Alias != nil && !uc.validAlias(*input.Alias) {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(errs.ErrInvalidInput))
 		return LinkCreateOutput{}, errs.ErrInvalidInput
 	}
 
+	output, err := uc.create(ctx, input)
+	if err != nil {
+		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
+		return output, err
+	}
+
+	uc.applicationMetrics.IncrementCreateSuccess()
+
+	return output, nil
+}
+
+func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) (LinkCreateOutput, error) {
 	for range maxCodeAttempts {
 		code, generateErr := uc.code(input.Alias)
 		if generateErr != nil {
@@ -75,11 +110,19 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 			ctx,
 			model.LinkModel{Code: code, Destination: input.Destination, Active: true, ExpiresAt: input.ExpiresAt},
 		)
-		if errors.Is(createErr, errs.ErrCodeConflict) && input.Alias == nil {
-			continue
+		if errors.Is(createErr, errs.ErrCodeConflict) {
+			if input.Alias == nil {
+				uc.applicationMetrics.IncrementAutomaticCollision()
+				continue
+			}
+
+			uc.applicationMetrics.IncrementAliasConflict()
+
+			return LinkCreateOutput{}, createErr
 		}
 
 		if createErr != nil {
+			uc.applicationMetrics.IncrementCodePersistenceError()
 			return LinkCreateOutput{}, createErr
 		}
 
@@ -94,6 +137,8 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 			UpdatedAt:   link.UpdatedAt,
 		}, nil
 	}
+
+	uc.applicationMetrics.IncrementCodeRetriesExhausted()
 
 	return LinkCreateOutput{}, errors.New("automatic code generation exhausted retries")
 }
@@ -118,7 +163,11 @@ func (uc *LinkCreateUseCase) code(alias *string) (string, error) {
 		return *alias, nil
 	}
 
-	return uc.generator.Generate()
+	startedAt := time.Now()
+	code, err := uc.generator.Generate()
+	uc.applicationMetrics.ObserveCodeGeneration(startedAt, err)
+
+	return code, err
 }
 
 func (uc *LinkCreateUseCase) validAlias(alias string) bool {

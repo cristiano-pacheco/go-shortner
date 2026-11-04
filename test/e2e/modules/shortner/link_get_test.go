@@ -14,6 +14,7 @@ type GetLinkSuite struct {
 	endpointSuite
 }
 
+//nolint:paralleltest // Management suites share a Compose stack.
 func TestGetLinkSuite(t *testing.T) {
 	suite.Run(t, new(GetLinkSuite))
 }

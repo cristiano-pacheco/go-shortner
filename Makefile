@@ -33,6 +33,7 @@ COMPOSE = docker compose --env-file "$(COMPOSE_ENV_FILE)" -f docker/docker-compo
 .PHONY: setup
 setup:
 	@COMPOSE_ENV_FILE="$(COMPOSE_ENV_FILE)" ./scripts/setup.sh
+	$(COMPOSE) --profile observability up -d prometheus grafana tempo
 
 .PHONY: docker-up
 docker-up:
@@ -94,7 +95,7 @@ test-integration-cover:
 
 .PHONY: test-e2e
 test-e2e:
-	go test -count=1 -v -timeout=10m -tags=e2e ./test/e2e/...
+	bash ./scripts/e2e-test.sh
 
 .PHONY: cover
 cover:

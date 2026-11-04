@@ -13,6 +13,7 @@ var Module = fx.Module("httpserver",
 		fx.Annotate(logger.New, fx.As(new(logger.Logger))),
 		fx.Annotate(newErrorHandler, fx.As(new(response.ErrorHandler))),
 		NewAPIKeyMiddleware,
+		NewMetricsMiddleware,
 	),
 	fx.Invoke(Register),
 )

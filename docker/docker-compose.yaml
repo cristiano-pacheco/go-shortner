@@ -25,5 +25,40 @@ services:
       timeout: 3s
       retries: 30
 
+  prometheus:
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9091}:9090"
+    volumes:
+      - ./observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
+    profiles: [observability]
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./observability/datasources.yaml:/etc/grafana/provisioning/datasources/shortener.yaml:ro
+      - ./observability/dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/shortener.yaml:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards/shortener:ro
+      - grafana_data:/var/lib/grafana
+
+  tempo:
+    image: grafana/tempo:2.8.2@sha256:0ef775495967cd5d7a6b2e146b6ea695d624803c8db8349fb8ce4164f719f9b7
+    profiles: [observability]
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:

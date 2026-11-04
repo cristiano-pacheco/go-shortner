@@ -6,6 +6,7 @@ import (
 
 	"github.com/cristiano-pacheco/bricks/pkg/http/response"
 	"github.com/go-chi/chi/v5"
+	playgroundvalidator "github.com/go-playground/validator/v10"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
@@ -26,7 +27,8 @@ func NewLinkRedirectHandler(
 func (h *LinkRedirectHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 	output, err := h.linkResolveUseCase.Execute(r.Context(), usecase.LinkResolveInput{Code: chi.URLParam(r, "code")})
 	if err != nil {
-		if errors.Is(err, errs.ErrLinkNotFound) {
+		var validationErrors playgroundvalidator.ValidationErrors
+		if errors.Is(err, errs.ErrLinkNotFound) || errors.As(err, &validationErrors) {
 			err = errLinkNotFound
 		}
 

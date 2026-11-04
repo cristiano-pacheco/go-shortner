@@ -54,6 +54,7 @@ type CreateLinkSuite struct {
 	endpointSuite
 }
 
+//nolint:paralleltest // Management suites share a Compose stack.
 func TestCreateLinkSuite(t *testing.T) {
 	suite.Run(t, new(CreateLinkSuite))
 }
@@ -162,7 +163,24 @@ func (s *CreateLinkSuite) TestRejectsOversizedBody() {
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingDestination() {
-	s.rejectedCreate(`{}`, apiKey, "application/json", 400)
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPost,
+		"/api/v1/links",
+		`{}`,
+		apiKey,
+		"application/json",
+		http.StatusBadRequest,
+	)
+
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &response))
+	s.Equal("invalid_argument", response.Error.Code)
+	s.Empty(s.persistedLinks())
 }
 
 func (s *CreateLinkSuite) TestRejectsRelativeDestination() {
@@ -209,6 +227,16 @@ func (s *CreateLinkSuite) TestRejectsExpiredLink() {
 		"application/json",
 		400,
 	)
+}
+
+func (s *CreateLinkSuite) TestMigrationRerunPreservesExistingRows() {
+	s.create("migration-rerun-e2e")
+	before := s.persistedLinks()
+	s.Require().Len(before, 1)
+
+	out, err := s.http.run("run", "--rm", "--no-deps", "app", "migrate")
+	s.Require().NoError(err, "rerun migrations: %s", out)
+	s.Equal(before, s.persistedLinks())
 }
 
 func (s *CreateLinkSuite) TestDuplicateAliasDoesNotChangeExistingRow() {

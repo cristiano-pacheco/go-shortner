@@ -16,11 +16,57 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/suite"
 )
 
 const apiKey = "e2e-test-key"
 const publicBase = "https://short.example"
+
+// Management suites run sequentially and reset PostgreSQL and Redis before each test.
+//
+//nolint:gochecknoglobals // TestMain owns the shared stack and its cleanup.
+var managementStack httpSuite
+
+//nolint:gochecknoglobals // TestMain cleans up even when startup fails.
+var managementCleanups []func() error
+
+//nolint:gochecknoglobals // All stacks share the build cache for one test run.
+var e2eBuildID = func() string {
+	if id := os.Getenv("SHORTNER_E2E_BUILD_ID"); id != "" {
+		return id
+	}
+
+	return fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
+}()
+
+//nolint:gochecknoglobals // TestMain only cleans up images after a build was attempted.
+var e2eBuildAttempted bool
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+
+	for _, cleanup := range managementCleanups {
+		if err := cleanup(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+
+			code = 1
+		}
+	}
+
+	if e2eBuildAttempted {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		out, err := exec.CommandContext(ctx, "docker", "image", "prune", "-f", "--filter", "label=io.go-shortner.e2e-build="+e2eBuildID).CombinedOutput()
+		cancel()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "remove E2E build images: %v\n%s", err, out)
+			code = 1
+		}
+	}
+
+	os.Exit(code)
+}
 
 type link struct {
 	ID          int64      `json:"id"`
@@ -34,12 +80,24 @@ type link struct {
 }
 
 type httpSuite struct {
-	base   string
-	client *http.Client
-	run    func(...string) ([]byte, error)
+	base        string
+	metricsBase string
+	client      *http.Client
+	run         func(...string) ([]byte, error)
 }
 
 func start(t *testing.T) httpSuite {
+	t.Helper()
+	return startStack(t, false)
+}
+
+func startStack(t *testing.T, shared bool) httpSuite {
+	t.Helper()
+
+	return startConfiguredStack(t, shared, "")
+}
+
+func startConfiguredStack(t *testing.T, shared bool, composeOverride string) httpSuite {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
@@ -49,6 +107,11 @@ func start(t *testing.T) httpSuite {
 
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 	project := fmt.Sprintf("shortner-e2e-%d", time.Now().UnixNano())
+	if dir := os.Getenv("SHORTNER_E2E_CLEANUP_DIR"); dir != "" {
+		if err := os.WriteFile(filepath.Join(dir, "project-"+project), nil, 0o600); err != nil {
+			t.Fatalf("register E2E cleanup: %v", err)
+		}
+	}
 
 	env := append(
 		os.Environ(),
@@ -58,9 +121,11 @@ func start(t *testing.T) httpSuite {
 		"API_KEY="+apiKey,
 		"PUBLIC_BASE_URL="+publicBase,
 		"APP_PORT=0",
+		"METRICS_PORT=0",
 		"POSTGRES_PORT=0",
 		"REDIS_PORT=0",
 	)
+
 	args := []string{
 		"compose",
 		"-p",
@@ -70,61 +135,99 @@ func start(t *testing.T) httpSuite {
 		"-f",
 		filepath.Join(root, "docker/docker-compose.app.yaml"),
 	}
+	if composeOverride != "" {
+		args = append(args, "-f", composeOverride)
+	}
+
 	run := func(extra ...string) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, "docker", append(append([]string{}, args...), extra...)...)
+		command := "docker"
+		commandArgs := append(append([]string{}, args...), extra...)
+		if dir := os.Getenv("SHORTNER_E2E_CLEANUP_DIR"); dir != "" {
+			command = "bash"
+			commandArgs = append([]string{filepath.Join(root, "scripts/e2e-compose.sh"), dir, project}, commandArgs...)
+		}
+		cmd := exec.CommandContext(ctx, command, commandArgs...)
 		cmd.Dir = root
 		cmd.Env = env
 
 		return cmd.CombinedOutput()
 	}
 
-	t.Cleanup(func() {
-		if out, err := run("down", "--volumes", "--remove-orphans"); err != nil {
-			t.Errorf("compose cleanup: %v\n%s", err, out)
+	cleanup := func() error {
+		out, err := run("down", "--volumes", "--remove-orphans", "--rmi", "local")
+		if err != nil {
+			return fmt.Errorf("compose cleanup: %w\n%s", err, out)
 		}
-	})
 
-	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "app"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app"}} {
+		return nil
+	}
+	if shared {
+		managementCleanups = append(managementCleanups, cleanup)
+	} else {
+		t.Cleanup(func() {
+			if err := cleanup(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+
+	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "--build-arg", "E2E_BUILD_ID=" + e2eBuildID, "app"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app"}} {
+		if step[0] == "build" {
+			e2eBuildAttempted = true
+		}
+
 		if out, err := run(step...); err != nil {
 			t.Fatalf("compose %v: %v\n%s", step, err, out)
 		}
 	}
 
-	out, err := run("port", "app", "8080")
-	if err != nil {
-		t.Fatalf("compose port: %v\n%s", err, out)
-	}
-
-	base := "http://" + strings.TrimSpace(string(out))
 	s := httpSuite{
-		base,
-		&http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}},
-		run,
+		run: run,
 	}
+	s.base = s.composeAddress(t, "8080")
+	s.metricsBase = s.composeAddress(t, "9090")
+
+	s.waitReady(t)
+
+	return s
+}
+
+func (s httpSuite) waitReady(t *testing.T) {
+	t.Helper()
 
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := s.client.Get(base + "/health")
+		resp, err := s.client.Get(s.base + "/health")
 		if err == nil {
 			resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
-				return s
+				return
 			}
 		}
 
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	logs, _ := run("logs", "app")
+	logs, _ := s.run("logs", "app")
 	t.Fatalf("application did not become healthy:\n%s", logs)
+}
 
-	return httpSuite{}
+func (s httpSuite) composeAddress(t *testing.T, port string) string {
+	t.Helper()
+
+	out, err := s.run("port", "app", port)
+	if err != nil {
+		t.Fatalf("compose port %s: %v\n%s", port, err, out)
+	}
+
+	return "http://" + strings.TrimSpace(string(out))
 }
 
 func (s httpSuite) request(t *testing.T, method, path, body, key, contentType string) (int, http.Header, []byte) {
@@ -182,11 +285,78 @@ func decodeLink(t *testing.T, b []byte) link {
 type endpointSuite struct {
 	suite.Suite
 
-	http httpSuite
+	http         httpSuite
+	postgresPool *pgxpool.Pool
+	redisClient  *redis.Client
 }
 
 func (s *endpointSuite) SetupSuite() {
-	s.http = start(s.T())
+	if s.http.base == "" {
+		s.startStack()
+	}
+
+	t := s.T()
+	t.Cleanup(func() {
+		if s.postgresPool != nil {
+			s.postgresPool.Close()
+		}
+
+		if s.redisClient != nil {
+			if err := s.redisClient.Close(); err != nil {
+				t.Errorf("close Redis fixture client: %v", err)
+			}
+		}
+	})
+	s.connectFixtures()
+}
+
+func (s *endpointSuite) startStack() {
+	switch s.T().Name() {
+	case "TestCreateLinkSuite", "TestDeleteLinkSuite", "TestGetLinkSuite", "TestListLinkSuite", "TestUpdateLinkSuite":
+		if managementStack.base == "" {
+			managementStack = startStack(s.T(), true)
+		} else {
+			out, err := managementStack.run("restart", "app")
+			s.Require().NoError(err, "%s", out)
+			managementStack.base = managementStack.composeAddress(s.T(), "8080")
+			managementStack.metricsBase = managementStack.composeAddress(s.T(), "9090")
+			managementStack.waitReady(s.T())
+		}
+
+		s.http = managementStack
+	default:
+		s.http = start(s.T())
+	}
+}
+
+func (s *endpointSuite) connectFixtures() {
+	out, err := s.http.run("port", "postgres", "5432")
+	s.Require().NoError(err, "%s", out)
+	postgresAddress := strings.TrimSpace(string(out))
+	out, err = s.http.run("port", "redis", "6379")
+	s.Require().NoError(err, "%s", out)
+	redisAddress := strings.TrimSpace(string(out))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if s.postgresPool != nil {
+		s.postgresPool.Close()
+	}
+
+	if s.redisClient != nil {
+		s.Require().NoError(s.redisClient.Close())
+		s.redisClient = nil
+	}
+
+	s.postgresPool, err = pgxpool.New(
+		ctx,
+		"postgres://shortener:e2e-only@"+postgresAddress+"/shortener?sslmode=disable",
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(s.postgresPool.Ping(ctx))
+	s.redisClient = redis.NewClient(&redis.Options{Addr: redisAddress})
+	s.Require().NoError(s.redisClient.Ping(ctx).Err())
 }
 
 func (s *endpointSuite) create(alias string) link {
@@ -203,27 +373,31 @@ func (s *endpointSuite) create(alias string) link {
 // sql executes fixtures only inside the isolated Compose project's PostgreSQL.
 func (s *endpointSuite) sql(query string) {
 	s.T().Helper()
-	out, err := s.http.run(
-		"exec",
-		"-T",
-		"postgres",
-		"psql",
-		"-X",
-		"-v",
-		"ON_ERROR_STOP=1",
-		"-U",
-		"shortener",
-		"-d",
-		"shortener",
-		"-c",
-		query,
-	)
-	s.Require().NoError(err, "fixture SQL: %s", out)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := s.postgresPool.Exec(ctx, query)
+	s.Require().NoError(err, "fixture SQL")
 }
 
 func (s *endpointSuite) SetupTest() {
-	s.sql("TRUNCATE TABLE links RESTART IDENTITY")
-	out, err := s.http.run("exec", "-T", "redis", "redis-cli", "FLUSHDB")
-	s.Require().NoError(err, "clear Redis: %s", out)
-	s.Require().Equal("OK", strings.TrimSpace(string(out)))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := s.postgresPool.Exec(ctx, "TRUNCATE TABLE links RESTART IDENTITY")
+	if err != nil {
+		s.connectFixtures()
+		_, err = s.postgresPool.Exec(ctx, "TRUNCATE TABLE links RESTART IDENTITY")
+	}
+
+	s.Require().NoError(err)
+
+	err = s.redisClient.FlushDB(ctx).Err()
+	if err != nil {
+		s.connectFixtures()
+		err = s.redisClient.FlushDB(ctx).Err()
+	}
+
+	s.Require().NoError(err)
 }

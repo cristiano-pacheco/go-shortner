@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -12,64 +14,110 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
-type LinkRepository struct{ database *database.Database }
+type LinkRepository struct {
+	database *database.Database
+	metrics  *metrics.Metrics
+}
 
 var _ port.LinkRepository = (*LinkRepository)(nil)
 
-func NewLinkRepository(database *database.Database) *LinkRepository {
-	return &LinkRepository{database: database}
+func NewLinkRepository(database *database.Database, metrics *metrics.Metrics) *LinkRepository {
+	return &LinkRepository{database: database, metrics: metrics}
 }
 
 func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Create")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("create", time.Now(), &resultErr)
+
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	link.ID, link.CreatedAt, link.UpdatedAt, link.DeletedAt = 0, now, now, nil
 
-	err := gorm.G[model.LinkModel](r.database.DB).Create(ctx, &link)
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return model.LinkModel{}, errs.ErrCodeConflict
+	resultErr = gorm.G[model.LinkModel](r.database.DB).Create(ctx, &link)
+	if errors.Is(resultErr, gorm.ErrDuplicatedKey) {
+		resultErr = errs.ErrCodeConflict
 	}
 
-	if err != nil {
-		return model.LinkModel{}, err
+	if resultErr != nil {
+		return model.LinkModel{}, resultErr
 	}
 
 	return link, nil
 }
 
 func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.FindByID")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("find_by_id", time.Now(), &resultErr)
+
 	link, err := gorm.G[model.LinkModel](r.database.DB).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
-	return r.found(link, err)
+	link, resultErr = r.found(link, err)
+
+	return link, resultErr
 }
 
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.FindByCode")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("find_by_code", time.Now(), &resultErr)
+
 	link, err := gorm.G[model.LinkModel](
 		r.database.DB,
 	).Where("code = ? AND deleted_at IS NULL", code).
 		Limit(1).
 		First(ctx)
 
-	return r.found(link, err)
+	link, resultErr = r.found(link, err)
+
+	return link, resultErr
 }
 
 func (r *LinkRepository) List(ctx context.Context, limit, offset int) ([]model.LinkModel, int64, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.List")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("list", time.Now(), &resultErr)
+
 	db := r.database.WithContext(ctx).Model(&model.LinkModel{}).Where("deleted_at IS NULL")
 
 	var total int64
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
+
+	resultErr = db.Count(&total).Error
+	if resultErr != nil {
+		return nil, 0, resultErr
 	}
 
 	links := make([]model.LinkModel, 0)
-	if err := db.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&links).Error; err != nil {
-		return nil, 0, err
+
+	resultErr = db.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&links).Error
+	if resultErr != nil {
+		return nil, 0, resultErr
 	}
 
 	return links, total, nil
 }
 
-func (r *LinkRepository) Update(ctx context.Context, id int64, changes model.LinkChanges) (model.LinkModel, error) {
+func (r *LinkRepository) Update(
+	ctx context.Context,
+	id int64,
+	changes model.LinkChanges,
+) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Update")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("update", time.Now(), &resultErr)
+
 	values := map[string]any{"updated_at": time.Now().UTC()}
 	if changes.Destination != nil {
 		values["destination"] = *changes.Destination
@@ -83,12 +131,40 @@ func (r *LinkRepository) Update(ctx context.Context, id int64, changes model.Lin
 		values["expires_at"] = changes.ExpiresAt
 	}
 
-	return r.mutate(ctx, id, values)
+	link, err := r.mutate(ctx, id, values)
+	resultErr = err
+
+	return link, err
 }
 
 func (r *LinkRepository) Delete(ctx context.Context, id int64) (model.LinkModel, error) {
+	ctx, span := trace.Span(ctx, "LinkRepository.Delete")
+	defer span.End()
+
+	var resultErr error
+	defer r.observe("delete", time.Now(), &resultErr)
+
 	now := time.Now().UTC()
-	return r.mutate(ctx, id, map[string]any{"deleted_at": now, "updated_at": now})
+
+	link, err := r.mutate(ctx, id, map[string]any{"deleted_at": now, "updated_at": now})
+	resultErr = err
+
+	return link, err
+}
+
+func (r *LinkRepository) observe(operation string, startedAt time.Time, err *error) {
+	result := "success"
+
+	switch {
+	case errors.Is(*err, errs.ErrLinkNotFound):
+		result = "not_found"
+	case errors.Is(*err, errs.ErrCodeConflict):
+		result = "duplicate"
+	case *err != nil:
+		result = "error"
+	}
+
+	r.metrics.ObserveRepositoryOperation(operation, result, startedAt)
 }
 
 // PostgreSQL RETURNING obtains the written row in the same atomic statement.

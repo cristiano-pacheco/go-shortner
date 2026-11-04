@@ -3,6 +3,7 @@
 package shortner_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ type UpdateLinkSuite struct {
 	endpointSuite
 }
 
+//nolint:paralleltest // Management suites share a Compose stack.
 func TestUpdateLinkSuite(t *testing.T) {
 	suite.Run(t, new(UpdateLinkSuite))
 }
@@ -160,7 +162,25 @@ func (s *UpdateLinkSuite) TestUnknownFieldLeavesDatabaseUnchanged() {
 }
 
 func (s *UpdateLinkSuite) TestInvalidDestinationLeavesDatabaseUnchanged() {
-	s.rejectedPatch("/api/v1/links/1", `{"destination":"ftp://example.com","active":false}`, apiKey, 400)
+	before := s.fixture()
+	_, body := s.http.expect(
+		s.T(),
+		http.MethodPatch,
+		"/api/v1/links/1",
+		`{"destination":"ftp://example.com","active":false}`,
+		apiKey,
+		"application/json",
+		http.StatusBadRequest,
+	)
+
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &response))
+	s.Equal("invalid_argument", response.Error.Code)
+	s.Equal(before, s.persistedLinks())
 }
 
 func (s *UpdateLinkSuite) TestNullActiveLeavesDatabaseUnchanged() {
