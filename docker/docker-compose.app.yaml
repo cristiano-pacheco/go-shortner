@@ -2,6 +2,7 @@ services:
   app:
     build:
       context: ..
+    stop_grace_period: 35s
     read_only: true
     cap_drop:
       - ALL

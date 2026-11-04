@@ -21,7 +21,7 @@ const (
 	readTimeout         = 15 * time.Second
 	writeTimeout        = 15 * time.Second
 	idleTimeout         = 60 * time.Second
-	drainTimeout        = 8 * time.Second
+	drainTimeout        = 20 * time.Second
 )
 
 // ManagementRoute registers paths relative to /api/v1.

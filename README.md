@@ -29,7 +29,7 @@ The application listens at `http://localhost:8080` by default. Stop the stack wi
 
 Bricks manages the tracing provider through Fx. The supplied `app.open-telemetry` configuration exports OTLP over gRPC to `tempo:4317` on the Compose network. Use an environment-specific YAML file to select another endpoint when running outside Compose. Set `trace_enabled` to `false` to disable export or set `sample_rate` between 0 and 1 to control root sampling. The supplied rate is 1. The exporter uses bounded queues and timeouts, and requests continue when Tempo is unavailable.
 
-The application creates spans for use cases, repository methods and Redis cache methods. It does not create HTTP spans or enable the Bricks GORM and Redis command plugins. Application spans do not contain link data or request payloads. HTTP drains before the tracing provider shuts down. Grafana's Tempo datasource can be used to inspect exported traces.
+The application creates spans for use cases, repository methods and Redis cache methods. It does not create HTTP spans or enable the Bricks GORM and Redis command plugins. Application spans do not contain link data or request payloads. HTTP drains before the tracing provider shuts down. Grafana's Tempo datasource can be used to inspect exported traces. If third-party tracing plugins are enabled in future, their exception and status messages may contain sensitive details even when SQL and argument capture is disabled.
 
 ## Documentation
 

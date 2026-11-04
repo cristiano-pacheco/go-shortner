@@ -215,7 +215,7 @@ func TestApplicationTracing(t *testing.T) {
 				_, err = fmt.Fprintf(conn, "POST /api/v1/links HTTP/1.1\r\nHost: localhost\r\nX-Api-Key: %s\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{", apiKey)
 				require.NoError(t, err)
 				time.Sleep(200 * time.Millisecond)
-				out, err = app.run("stop", "-t", "12", "app")
+				out, err = app.run("stop", "-t", "35", "app")
 				require.NoError(t, err, string(out))
 				require.Eventually(t, func() bool {
 					mu.Lock()

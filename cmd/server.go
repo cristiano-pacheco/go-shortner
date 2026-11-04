@@ -23,7 +23,7 @@ import (
 func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 	const (
 		startupTimeout  = 10 * time.Second
-		shutdownTimeout = 20 * time.Second
+		shutdownTimeout = 30 * time.Second
 	)
 
 	app := fx.New(

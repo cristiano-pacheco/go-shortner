@@ -3,12 +3,16 @@
 package shortner_test
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -374,4 +378,57 @@ func (s *RedirectLinkSuite) TestShutdownDrainsInFlightDatabaseOperation() {
 
 		return response.StatusCode == http.StatusOK
 	}, 30*time.Second, 200*time.Millisecond)
+}
+
+//nolint:paralleltest // The test stops its isolated Compose application.
+func TestShutdownDrainsSlowRequestBody(t *testing.T) {
+	stack := start(t)
+	body := `{"destination":"https://example.com/slow","alias":"slow-drain"}`
+	conn, err := net.DialTimeout("tcp", strings.TrimPrefix(stack.base, "http://"), 5*time.Second)
+	require.NoError(t, err)
+	defer conn.Close()
+	require.NoError(t, conn.SetDeadline(time.Now().Add(20*time.Second)))
+	_, err = fmt.Fprintf(conn, "POST /api/v1/links HTTP/1.1\r\nHost: localhost\r\nX-Api-Key: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", apiKey, len(body), body[:1])
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		response, requestErr := stack.client.Get(stack.metricsBase + "/metrics")
+		if requestErr != nil {
+			return false
+		}
+		defer response.Body.Close()
+		metrics, readErr := io.ReadAll(response.Body)
+		return readErr == nil && strings.Contains(string(metrics), `shortener_http_requests_in_flight{method="POST",route="/api/v1/links"} 1`)
+	}, 5*time.Second, 50*time.Millisecond)
+
+	stopDone := make(chan error, 1)
+	go func() {
+		out, stopErr := stack.run("stop", "app")
+		if stopErr != nil {
+			stopDone <- fmt.Errorf("stop app: %w: %s", stopErr, out)
+			return
+		}
+		stopDone <- nil
+	}()
+	require.Eventually(t, func() bool {
+		response, requestErr := stack.client.Get(stack.base + "/health")
+		if requestErr != nil {
+			return true
+		}
+		response.Body.Close()
+		return false
+	}, 3*time.Second, 50*time.Millisecond)
+
+	select {
+	case stopErr := <-stopDone:
+		t.Fatalf("shutdown completed while request was in flight: %v", stopErr)
+	case <-time.After(9 * time.Second):
+	}
+	_, err = io.WriteString(conn, body[1:])
+	require.NoError(t, err)
+	response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err)
+	defer response.Body.Close()
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	require.NoError(t, <-stopDone)
 }
