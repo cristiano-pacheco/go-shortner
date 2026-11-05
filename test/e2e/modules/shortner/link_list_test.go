@@ -320,3 +320,31 @@ func (s *ListLinkSuite) TestOffsetOverflow() {
 func (s *ListLinkSuite) TestInvalidQueryEscape() {
 	s.assertInvalidQuery("?page=%zz")
 }
+
+func (s *ListLinkSuite) TestPaginationErrorsAreDescriptive() {
+	cases := []struct {
+		query   string
+		code    string
+		message string
+	}{
+		{"?page=0", "SHORTENER_42", "page must be a positive integer"},
+		{"?page_size=101", "SHORTENER_43", "page size must be an integer between 1 and 100"},
+		{"?page=1&page=2", "SHORTENER_50", "page must not be specified more than once"},
+		{"?page_size=1&page_size=2", "SHORTENER_51", "page size must not be specified more than once"},
+		{"?page=%zz", "SHORTENER_45", "query string contains invalid encoding"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.query, func() {
+			_, body := s.http.expect(s.T(), http.MethodGet, "/api/v1/links"+tc.query, "", apiKey, "", http.StatusBadRequest)
+			var response struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			s.Require().NoError(json.Unmarshal(body, &response))
+			s.Equal(tc.code, response.Error.Code)
+			s.Equal(tc.message, response.Error.Message)
+		})
+	}
+}

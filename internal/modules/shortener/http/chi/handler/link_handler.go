@@ -1,13 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	playgroundvalidator "github.com/go-playground/validator/v10"
 
 	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
 	"github.com/cristiano-pacheco/bricks/pkg/http/response"
@@ -17,13 +17,8 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
-)
-
-var (
-	errInvalidInput = brickserrs.New("invalid_argument", "Invalid request", http.StatusBadRequest, nil)
-	errCodeConflict = brickserrs.New("code_conflict", "Code is already reserved", http.StatusConflict, nil)
-	errLinkNotFound = brickserrs.New("link_not_found", "Link not found", http.StatusNotFound, nil)
 )
 
 type LinkHandler struct {
@@ -59,20 +54,13 @@ func NewLinkHandler(
 func (h *LinkHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrInvalidLinkID)
 		return
 	}
 
 	_, err = h.linkDeleteUseCase.Execute(r.Context(), usecase.LinkDeleteInput{ID: id})
 	if err != nil {
-		switch {
-		case h.isInvalidInput(err):
-			err = errInvalidInput
-		case errors.Is(err, errs.ErrLinkNotFound):
-			err = errLinkNotFound
-		}
-
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 
 		return
 	}
@@ -83,37 +71,30 @@ func (h *LinkHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *LinkHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrInvalidLinkID)
 		return
 	}
 
 	var request *dto.LinkUpdateRequest
 	if err = httpserver.ReadJSON(r, &request); err != nil {
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 		return
 	}
 
 	if request == nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrMissingRequest)
 		return
 	}
 
 	input, err := mapper.ToLinkUpdateInput(id, *request)
 	if err != nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.writeError(w, err)
 		return
 	}
 
 	output, err := h.linkUpdateUseCase.Execute(r.Context(), input)
 	if err != nil {
-		switch {
-		case h.isInvalidInput(err):
-			err = errInvalidInput
-		case errors.Is(err, errs.ErrLinkNotFound):
-			err = errLinkNotFound
-		}
-
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 
 		return
 	}
@@ -144,7 +125,7 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrInvalidQuery)
 		return
 	}
 
@@ -158,13 +139,21 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(values) != 1 {
-			h.errorHandler.Error(w, errInvalidInput)
+			if param.name == "page" {
+				h.errorHandler.Error(w, errs.ErrPageRepeated)
+			} else {
+				h.errorHandler.Error(w, errs.ErrPageSizeRepeated)
+			}
 			return
 		}
 
 		value, parseErr := strconv.Atoi(values[0])
 		if parseErr != nil {
-			h.errorHandler.Error(w, errInvalidInput)
+			if param.name == "page" {
+				h.errorHandler.Error(w, errs.ErrInvalidPage)
+			} else {
+				h.errorHandler.Error(w, errs.ErrInvalidPageSize)
+			}
 			return
 		}
 
@@ -173,11 +162,7 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.linkListUseCase.Execute(r.Context(), input)
 	if err != nil {
-		if h.isInvalidInput(err) {
-			err = errInvalidInput
-		}
-
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 
 		return
 	}
@@ -190,20 +175,13 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrInvalidLinkID)
 		return
 	}
 
 	output, err := h.linkGetUseCase.Execute(r.Context(), usecase.LinkGetInput{ID: id})
 	if err != nil {
-		switch {
-		case h.isInvalidInput(err):
-			err = errInvalidInput
-		case errors.Is(err, errs.ErrLinkNotFound):
-			err = errLinkNotFound
-		}
-
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 
 		return
 	}
@@ -230,12 +208,21 @@ func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var request *dto.LinkCreateRequest
 	if err := httpserver.ReadJSON(r, &request); err != nil {
-		h.errorHandler.Error(w, err)
+		var fieldError *json.UnmarshalTypeError
+		switch {
+		case errors.As(err, &fieldError) && fieldError.Field == "destination":
+			err = errs.ErrDestinationType
+		case fieldError != nil && fieldError.Field == "alias":
+			err = errs.ErrAliasType
+		case errors.Is(err, sharederrs.ErrInvalidJSONTime):
+			err = errs.ErrInvalidExpiration
+		}
+		h.writeError(w, err)
 		return
 	}
 
 	if request == nil {
-		h.errorHandler.Error(w, errInvalidInput)
+		h.errorHandler.Error(w, errs.ErrMissingRequest)
 		return
 	}
 
@@ -244,14 +231,10 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		usecase.LinkCreateInput{Destination: request.Destination, Alias: request.Alias, ExpiresAt: request.ExpiresAt},
 	)
 	if err != nil {
-		switch {
-		case h.isInvalidInput(err):
-			err = errInvalidInput
-		case errors.Is(err, errs.ErrCodeConflict):
-			err = errCodeConflict
+		if errors.Is(err, errs.ErrCodeGenerationExhausted) {
+			err = brickserrs.New(errs.ErrCodeGenerationExhausted.Code, "internal server error", http.StatusInternalServerError, nil)
 		}
-
-		h.errorHandler.Error(w, err)
+		h.writeError(w, err)
 
 		return
 	}
@@ -275,7 +258,11 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *LinkHandler) isInvalidInput(err error) bool {
-	var validationErrors playgroundvalidator.ValidationErrors
-	return errors.Is(err, errs.ErrInvalidInput) || errors.As(err, &validationErrors)
+func (h *LinkHandler) writeError(w http.ResponseWriter, err error) {
+	var codedError *brickserrs.Error
+	if errors.As(err, &codedError) {
+		h.errorHandler.Error(w, codedError)
+		return
+	}
+	h.errorHandler.Error(w, err)
 }

@@ -2,9 +2,10 @@ package mapper
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 )
@@ -12,14 +13,20 @@ import (
 func ToLinkUpdateInput(id int64, request dto.LinkUpdateRequest) (usecase.LinkUpdateInput, error) {
 	input := usecase.LinkUpdateInput{ID: id}
 	if request.Destination != nil {
-		if err := json.Unmarshal(request.Destination, &input.Destination); err != nil || input.Destination == nil {
-			return input, errors.New("invalid destination")
+		if err := json.Unmarshal(request.Destination, &input.Destination); err != nil {
+			return input, fmt.Errorf("%w: %w", errs.ErrInvalidDestination, err)
+		}
+		if input.Destination == nil {
+			return input, errs.ErrInvalidDestination
 		}
 	}
 
 	if request.Active != nil {
-		if err := json.Unmarshal(request.Active, &input.Active); err != nil || input.Active == nil {
-			return input, errors.New("invalid active state")
+		if err := json.Unmarshal(request.Active, &input.Active); err != nil {
+			return input, fmt.Errorf("%w: %w", errs.ErrInvalidActive, err)
+		}
+		if input.Active == nil {
+			return input, errs.ErrInvalidActive
 		}
 	}
 
@@ -28,7 +35,7 @@ func ToLinkUpdateInput(id int64, request dto.LinkUpdateRequest) (usecase.LinkUpd
 
 		var expiresAt *time.Time
 		if err := json.Unmarshal(request.ExpiresAt, &expiresAt); err != nil {
-			return input, err
+			return input, fmt.Errorf("%w: %w", errs.ErrInvalidExpiration, err)
 		}
 
 		input.ExpiresAt = expiresAt

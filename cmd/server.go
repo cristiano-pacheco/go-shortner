@@ -15,6 +15,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
@@ -67,7 +68,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 	case <-cmd.Context().Done():
 	case signal := <-app.Wait():
 		if signal.ExitCode != 0 {
-			return errors.New("HTTP server stopped unexpectedly")
+			return sharederrs.ErrServerStopped
 		}
 	}
 

@@ -211,21 +211,14 @@ func (s *LinkValidationUseCaseSuite) TestPastExpirationReturnsValidationError() 
 			usecase.LinkCreateInput{Destination: "https://example.com", ExpiresAt: &expiration},
 		)
 
-		var validationErrors playgroundvalidator.ValidationErrors
-		s.Require().ErrorAs(err, &validationErrors)
-		s.Require().Len(validationErrors, 1)
-		s.Equal("ExpiresAt", validationErrors[0].Field())
-		s.Equal("gt", validationErrors[0].Tag())
+		s.Require().ErrorIs(err, errs.ErrExpirationInPast)
 
 		for _, setExpiresAt := range []bool{false, true} {
 			_, err = s.linkUpdateUseCase.Execute(
 				ctx,
 				usecase.LinkUpdateInput{ID: created.ID, SetExpiresAt: setExpiresAt, ExpiresAt: &expiration},
 			)
-			s.Require().ErrorAs(err, &validationErrors)
-			s.Require().Len(validationErrors, 1)
-			s.Equal("ExpiresAt", validationErrors[0].Field())
-			s.Equal("gt", validationErrors[0].Tag())
+			s.Require().ErrorIs(err, errs.ErrExpirationInPast)
 		}
 	}
 }
@@ -241,7 +234,7 @@ func (s *LinkValidationUseCaseSuite) TestInvalidUpdateDoesNotChangePersistedLink
 		ctx,
 		usecase.LinkUpdateInput{ID: created.ID, Destination: &invalid, Active: &active},
 	)
-	s.ErrorIs(err, errs.ErrInvalidInput)
+	s.ErrorIs(err, errs.ErrDestinationRequired)
 	stored, err := s.linkGetUseCase.Execute(ctx, usecase.LinkGetInput{ID: created.ID})
 	s.Require().NoError(err)
 	s.Equal(created.Destination, stored.Destination)
@@ -249,22 +242,44 @@ func (s *LinkValidationUseCaseSuite) TestInvalidUpdateDoesNotChangePersistedLink
 	s.True(created.UpdatedAt.Equal(stored.UpdatedAt))
 }
 
+func (s *LinkValidationUseCaseSuite) TestCreateReturnsSpecificValidationErrors() {
+	ctx := context.Background()
+	shortAlias := "ab"
+	reservedAlias := "api"
+	invalidAlias := "bad!"
+	cases := []struct {
+		name  string
+		input usecase.LinkCreateInput
+		want  error
+	}{
+		{"missing destination", usecase.LinkCreateInput{}, errs.ErrDestinationRequired},
+		{"destination credentials", usecase.LinkCreateInput{Destination: "https://user:pass@example.com"}, errs.ErrDestinationCredentials},
+		{"unsupported destination scheme", usecase.LinkCreateInput{Destination: "ftp://example.com"}, errs.ErrDestinationScheme},
+		{"short alias", usecase.LinkCreateInput{Destination: "https://example.com", Alias: &shortAlias}, errs.ErrAliasLength},
+		{"reserved alias", usecase.LinkCreateInput{Destination: "https://example.com", Alias: &reservedAlias}, errs.ErrAliasReserved},
+		{"invalid alias characters", usecase.LinkCreateInput{Destination: "https://example.com", Alias: &invalidAlias}, errs.ErrAliasCharacters},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			_, err := s.linkCreateUseCase.Execute(ctx, tc.input)
+			s.ErrorIs(err, tc.want)
+		})
+	}
+}
+
 func (s *LinkValidationUseCaseSuite) TestDirectInputsRejectInvalidValues() {
 	ctx := context.Background()
 	_, err := s.linkListUseCase.Execute(ctx, usecase.LinkListInput{Page: math.MaxInt, PageSize: 100})
-	s.ErrorIs(err, errs.ErrInvalidInput)
+	s.ErrorIs(err, errs.ErrPaginationOverflow)
 	_, err = s.linkGetUseCase.Execute(ctx, usecase.LinkGetInput{ID: 0})
 
+	s.Require().ErrorIs(err, errs.ErrInvalidLinkID)
 	var validationErrors playgroundvalidator.ValidationErrors
 	s.Require().ErrorAs(err, &validationErrors)
 	s.Require().Len(validationErrors, 1)
 	s.Equal("ID", validationErrors[0].Field())
-	s.Equal("gt", validationErrors[0].Tag())
 	_, err = s.linkResolveUseCase.Execute(ctx, usecase.LinkResolveInput{})
-	s.Require().ErrorAs(err, &validationErrors)
-	s.Require().Len(validationErrors, 1)
-	s.Equal("Code", validationErrors[0].Field())
-	s.Equal("required", validationErrors[0].Tag())
+	s.Require().ErrorIs(err, errs.ErrCodeRequired)
 
 	for _, code := range []string{"api", "health"} {
 		_, err = s.linkResolveUseCase.Execute(ctx, usecase.LinkResolveInput{Code: code})

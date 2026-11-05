@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/url"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 
 const (
@@ -49,12 +49,12 @@ func NewPostgreSQL(lifecycle fx.Lifecycle, cfg config.Config) *Database {
 				Logger:               logger.Default.LogMode(logger.Silent),
 			})
 			if err != nil {
-				return errors.New("cannot initialize PostgreSQL")
+				return sharederrs.ErrPostgreSQLInit
 			}
 
 			sqlDB, err := db.DB()
 			if err != nil {
-				return errors.New("cannot initialize PostgreSQL pool")
+				return sharederrs.ErrPostgreSQLPoolInit
 			}
 
 			sqlDB.SetMaxOpenConns(maxOpenConnections)
@@ -65,7 +65,7 @@ func NewPostgreSQL(lifecycle fx.Lifecycle, cfg config.Config) *Database {
 
 			if pingErr := sqlDB.PingContext(pingCtx); pingErr != nil {
 				_ = sqlDB.Close()
-				return errors.New("cannot connect to PostgreSQL")
+				return sharederrs.ErrPostgreSQLConnect
 			}
 
 			database.DB = db

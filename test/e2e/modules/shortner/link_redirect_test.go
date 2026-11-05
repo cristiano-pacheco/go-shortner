@@ -5,6 +5,7 @@ package shortner_test
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -28,8 +29,15 @@ func TestRedirectLinkSuite(t *testing.T) {
 
 func (s *RedirectLinkSuite) assertNotFound(code string) {
 	s.T().Helper()
-	headers, _ := s.http.expect(s.T(), http.MethodGet, "/"+code, "", "", "", http.StatusNotFound)
+	headers, body := s.http.expect(s.T(), http.MethodGet, "/"+code, "", "", "", http.StatusNotFound)
 	s.Empty(headers.Get("Location"))
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &response))
+	s.Equal("SHORTENER_01", response.Error.Code)
 }
 
 func (s *RedirectLinkSuite) redis(args ...string) string {

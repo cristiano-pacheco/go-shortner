@@ -55,7 +55,7 @@ func (uc *LinkResolveUseCase) Execute(
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementResolveError(errs.MetricCategory(err))
-		return LinkResolveOutput{}, err
+		return LinkResolveOutput{}, errs.ValidationError(err)
 	}
 
 	if input.Code == "api" || input.Code == "health" {

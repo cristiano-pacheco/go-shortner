@@ -69,7 +69,7 @@ func (uc *LinkUpdateUseCase) Execute(ctx context.Context, input LinkUpdateInput)
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementUpdateError(errs.MetricCategory(err))
-		return LinkUpdateOutput{}, err
+		return LinkUpdateOutput{}, errs.ValidationError(err)
 	}
 
 	if input.Destination != nil {
@@ -82,8 +82,8 @@ func (uc *LinkUpdateUseCase) Execute(ctx context.Context, input LinkUpdateInput)
 	if input.SetExpiresAt && input.ExpiresAt != nil {
 		expiration := input.ExpiresAt.UTC().Truncate(time.Microsecond)
 		if !expiration.After(time.Now()) {
-			uc.applicationMetrics.IncrementUpdateError(errs.MetricCategory(errs.ErrInvalidInput))
-			return LinkUpdateOutput{}, errs.ErrInvalidInput
+			uc.applicationMetrics.IncrementUpdateError(errs.MetricCategory(errs.ErrExpirationInPast))
+			return LinkUpdateOutput{}, errs.ErrExpirationInPast
 		}
 
 		input.ExpiresAt = &expiration

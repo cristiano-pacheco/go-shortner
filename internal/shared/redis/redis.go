@@ -2,13 +2,13 @@ package redis
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 
 const redisPingTimeout = 3 * time.Second
@@ -20,7 +20,7 @@ type Client struct {
 func NewRedis(lifecycle fx.Lifecycle, cfg config.Config) (*Client, error) {
 	opts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		return nil, errors.New("invalid Redis URL")
+		return nil, sharederrs.ErrRedisURLInvalid
 	}
 
 	opts.DialTimeout = time.Second
@@ -40,7 +40,7 @@ func NewRedis(lifecycle fx.Lifecycle, cfg config.Config) (*Client, error) {
 
 			if pingErr := redisClient.Ping(pingCtx).Err(); pingErr != nil {
 				_ = redisClient.Close()
-				return errors.New("cannot connect to Redis")
+				return sharederrs.ErrRedisConnect
 			}
 
 			client.Client = redisClient

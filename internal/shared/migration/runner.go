@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	bricksmigration "github.com/cristiano-pacheco/bricks/pkg/migration"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	"go.uber.org/fx"
 )
 
@@ -31,11 +32,11 @@ func NewRunner(params Params) (*bricksmigration.Runner, error) {
 
 		version, _, ok := strings.Cut(base, "_")
 		if !ok {
-			return nil, fmt.Errorf("invalid migration filename: %s", name)
+			return nil, fmt.Errorf("%w: %s", sharederrs.ErrMigrationFilenameInvalid, name)
 		}
 
 		if previous, exists := versions[version]; exists && previous != base {
-			return nil, fmt.Errorf("duplicate migration version: %s", version)
+			return nil, fmt.Errorf("%w: %s", sharederrs.ErrMigrationVersionDuplicate, version)
 		}
 
 		versions[version] = base
@@ -47,7 +48,7 @@ func NewRunner(params Params) (*bricksmigration.Runner, error) {
 func collectFiles(filesystem bricksmigration.FileSystem, seen map[string]bool) error {
 	entries, err := fs.ReadDir(filesystem.FS, ".")
 	if err != nil {
-		return fmt.Errorf("read migration files: %w", err)
+		return fmt.Errorf("%w: %w", sharederrs.ErrMigrationRead, err)
 	}
 
 	for _, entry := range entries {
@@ -57,7 +58,7 @@ func collectFiles(filesystem bricksmigration.FileSystem, seen map[string]bool) e
 
 		name := entry.Name()
 		if seen[name] {
-			return fmt.Errorf("duplicate migration file: %s", name)
+			return fmt.Errorf("%w: %s", sharederrs.ErrMigrationFileDuplicate, name)
 		}
 
 		seen[name] = true

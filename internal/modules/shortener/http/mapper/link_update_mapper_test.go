@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/dto"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/http/mapper"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
@@ -59,22 +60,23 @@ func (s *LinkUpdateMapperSuite) TestRejectsInvalidFields() {
 	cases := []struct {
 		name    string
 		request dto.LinkUpdateRequest
+		want    error
 	}{
-		{"null destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`null`)}},
-		{"non-string destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`123`)}},
-		{"malformed destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`"unfinished`)}},
-		{"null active", dto.LinkUpdateRequest{Active: json.RawMessage(`null`)}},
-		{"non-boolean active", dto.LinkUpdateRequest{Active: json.RawMessage(`"false"`)}},
-		{"malformed active", dto.LinkUpdateRequest{Active: json.RawMessage(`tru`)}},
-		{"invalid expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`"not-a-date"`)}},
-		{"non-string expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`123`)}},
-		{"malformed expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`"unfinished`)}},
+		{"null destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`null`)}, errs.ErrInvalidDestination},
+		{"non-string destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`123`)}, errs.ErrInvalidDestination},
+		{"malformed destination", dto.LinkUpdateRequest{Destination: json.RawMessage(`"unfinished`)}, errs.ErrInvalidDestination},
+		{"null active", dto.LinkUpdateRequest{Active: json.RawMessage(`null`)}, errs.ErrInvalidActive},
+		{"non-boolean active", dto.LinkUpdateRequest{Active: json.RawMessage(`"false"`)}, errs.ErrInvalidActive},
+		{"malformed active", dto.LinkUpdateRequest{Active: json.RawMessage(`tru`)}, errs.ErrInvalidActive},
+		{"invalid expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`"not-a-date"`)}, errs.ErrInvalidExpiration},
+		{"non-string expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`123`)}, errs.ErrInvalidExpiration},
+		{"malformed expiration", dto.LinkUpdateRequest{ExpiresAt: json.RawMessage(`"unfinished`)}, errs.ErrInvalidExpiration},
 	}
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
 			_, err := mapper.ToLinkUpdateInput(42, tc.request)
-			s.Error(err)
+			s.ErrorIs(err, tc.want)
 		})
 	}
 }

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"net"
 	"net/url"
 
@@ -11,6 +10,7 @@ import (
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	sharedmigration "github.com/cristiano-pacheco/go-shortner/internal/shared/migration"
 )
 
@@ -38,7 +38,7 @@ func newMigrateCommand() *cobra.Command {
 					}
 					if err := runner.Up(address.String()); err != nil {
 						// Driver errors can include a DSN and its credentials.
-						return errors.New("database migration failed")
+						return sharederrs.ErrMigrationFailed
 					}
 
 					return nil
