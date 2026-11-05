@@ -54,6 +54,12 @@ func (s *RedirectLinkSuite) TestGetRedirectPreservesDestination() {
 	s.Equal("no-store", headers.Get("Cache-Control"))
 }
 
+func (s *RedirectLinkSuite) TestHealthzRemainsAnAvailableCode() {
+	s.sql(`INSERT INTO links (code, destination) VALUES ('healthz', 'https://example.com/healthz')`)
+	headers, _ := s.http.expect(s.T(), http.MethodGet, "/healthz", "", "", "", http.StatusFound)
+	s.Equal("https://example.com/healthz", headers.Get("Location"))
+}
+
 func (s *RedirectLinkSuite) TestHeadRedirectHasNoBody() {
 	s.sql(`INSERT INTO links (code, destination) VALUES ('head-link', 'https://example.com/head')`)
 	headers, body := s.http.expect(s.T(), http.MethodHead, "/head-link", "", "", "", http.StatusFound)

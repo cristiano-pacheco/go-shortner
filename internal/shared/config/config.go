@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"net"
 	"net/url"
 	"strings"
 
@@ -12,7 +11,6 @@ import (
 type Config struct {
 	APIKey        string `config:"api_key"`
 	PublicBaseURL string `config:"public_base_url"`
-	HTTPAddr      string `config:"http_addr"`
 }
 
 func Load() (Config, error) {
@@ -39,14 +37,6 @@ func validateEndpoints(cfg *Config) error {
 		u.RawQuery != "" ||
 		u.Fragment != "" {
 		return errors.New("public base URL must be an absolute HTTP or HTTPS URL")
-	}
-
-	if cfg.HTTPAddr == "" {
-		cfg.HTTPAddr = ":8080"
-	}
-
-	if _, _, splitErr := net.SplitHostPort(cfg.HTTPAddr); splitErr != nil {
-		return errors.New("HTTP address must include a port")
 	}
 
 	return nil

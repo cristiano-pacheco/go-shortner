@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/cristiano-pacheco/bricks/pkg/database"
+	"github.com/cristiano-pacheco/bricks/pkg/http/server/chi"
 	bricksmetrics "github.com/cristiano-pacheco/bricks/pkg/http/server/metrics"
+	"github.com/cristiano-pacheco/bricks/pkg/logger"
 	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
 	"github.com/cristiano-pacheco/bricks/pkg/redis"
 	"github.com/cristiano-pacheco/bricks/pkg/validator"
@@ -28,7 +30,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 
 	app := fx.New(
 		fx.NopLogger,
-		fx.Provide(config.Load),
+		fx.Provide(config.Load, logger.DefaultConfig),
 		trace.Module,
 		validator.Module,
 		fx.Provide(fx.Annotate(metrics.NewRegistry,
@@ -42,6 +44,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 		fx.Invoke(metrics.RegisterPoolMetrics),
 		shortener.Module,
 		httpserver.Module,
+		chi.Module,
 	)
 	if err := app.Err(); err != nil {
 		return err

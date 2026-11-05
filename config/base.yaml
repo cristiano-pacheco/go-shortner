@@ -39,6 +39,13 @@ app:
     pooltimeout: 1s
     maxretries: 1
     contexttimeoutenabled: true
+  http:
+    address: "env://HTTP_ADDR"
+    port: 8080
+    enablemetrics: false
+    readtimeout: 15s
+    writetimeout: 15s
+    idletimeout: 60s
+    shutdowntimeout: 20s
   api_key: "env://API_KEY"
   public_base_url: "env://PUBLIC_BASE_URL"
-  http_addr: "env://HTTP_ADDR"
