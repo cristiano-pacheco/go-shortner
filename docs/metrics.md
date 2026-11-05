@@ -4,8 +4,9 @@ The application supplies one Prometheus registry to the Bricks administrative
 listener. The registry contains the Go and process collectors. Future metrics
 must register with the injected `prometheus.Registerer`, not the global
 registry. The listener binds to `0.0.0.0:9090` inside the container. Compose
-publishes it on `127.0.0.1:${METRICS_PORT:-9090}`; Prometheus scrapes it on the
-Compose network. The public listener has no metrics route.
+publishes management metrics on `127.0.0.1:${METRICS_PORT:-9090}` and public-process
+metrics on `127.0.0.1:${PUBLIC_METRICS_PORT:-9093}`. Prometheus scrapes both on the
+Compose network with `role` labels. The public HTTP listener has no metrics route.
 
 Each use case has separate success counters, error counters and duration histograms.
 Each execution is counted once, including input rejection. Error categories are

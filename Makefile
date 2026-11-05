@@ -19,7 +19,11 @@ install-libs:
 
 .PHONY: run
 run:
-	@set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run ./main.go server
+	@set -a; if [ -f .env ]; then . ./.env; fi; set +a; go run ./main.go management-server
+
+.PHONY: run-public
+run-public:
+	@set -a; if [ -f .env ]; then . ./.env; fi; set +a; APP_ENV="$${PUBLIC_APP_ENV:-public-local}" HTTP_ADDR="$${PUBLIC_HTTP_ADDR:-:8081}" go run ./main.go public-server
 
 .PHONY: migrate-local
 migrate-local:
@@ -46,7 +50,7 @@ migrate:
 
 .PHONY: docker-run
 docker-run:
-	$(COMPOSE) up -d --build app
+	$(COMPOSE) up -d --build app public
 
 .PHONY: docker-down
 docker-down:

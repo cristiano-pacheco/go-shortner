@@ -7,14 +7,22 @@ import (
 	"go.uber.org/fx"
 )
 
-// Module provides shared HTTP error rendering and application routes.
-var Module = fx.Module("httpserver",
+var sharedModule = fx.Provide(
+	fx.Annotate(logger.New, fx.As(new(logger.Logger))),
+	fx.Annotate(newErrorHandler, fx.As(new(response.ErrorHandler))),
+	NewMetricsMiddleware,
+)
+
+// PublicModule installs public routes without constructing management authentication.
+var PublicModule = fx.Module("httpserver-public", sharedModule,
+	fx.Provide(fx.Annotate(newApplicationRoutes, fx.As(new(chi.Route)), fx.ResultTags(`group:"routes"`))),
+)
+
+// ManagementModule installs only authenticated management routes.
+var ManagementModule = fx.Module("httpserver-management", sharedModule,
 	fx.Provide(
-		fx.Annotate(logger.New, fx.As(new(logger.Logger))),
-		fx.Annotate(newErrorHandler, fx.As(new(response.ErrorHandler))),
 		NewAPIKeyMiddleware,
-		NewMetricsMiddleware,
-		fx.Annotate(newApplicationRoutes, fx.As(new(chi.Route)), fx.ResultTags(`group:"routes"`)),
+		fx.Annotate(newManagementApplicationRoutes, fx.As(new(chi.Route)), fx.ResultTags(`group:"routes"`)),
 	),
 )
 

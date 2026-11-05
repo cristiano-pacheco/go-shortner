@@ -1,0 +1,417 @@
+{
+  "date": "2026-11-05",
+  "baseline_revision": "d0f86c0050cf8dc20ad8dba390a8b114c60e79e5",
+  "visible_links": 1000000,
+  "pool30_concurrency": [
+    {"vus": 50, "duration_seconds": 30, "requests_per_second": 5260.801051084787, "p95_ms": 34.36293535, "list_p95_ms": 35.341913799999986, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 100, "duration_seconds": 30, "requests_per_second": 5830.931008667968, "p95_ms": 57.9880802, "list_p95_ms": 66.74025989999998, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 200, "duration_seconds": 30, "requests_per_second": 1895.8498891434097, "p95_ms": 319.27588999999983, "list_p95_ms": 488.175551, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 10, "duration_seconds": 120, "requests_per_second": 6853.832838709103, "p95_ms": 2.33502755, "list_p95_ms": 2.1759456499999996, "http_error_rate": 0, "all_thresholds_passed": true}
+  ],
+  "notes": [
+    "Metrics enabled; tracing disabled. All services run in Docker Compose.",
+    "Go hard memory caps: baseline 256 MiB combined, optimized 64 MiB combined.",
+    "CPU caps: baseline/equal-cpu 1 combined; final defaults 1.5 combined.",
+    "Redirect working set: 1000 seeded codes. Rates exclude readiness/warmup."
+  ],
+  "cases": {
+    "pool-10-open-5-idle": {
+      "configuration": {"workload": "mixed", "vus": 10, "duration": "2m", "pool_open": 10, "pool_idle": 5},
+      "workload_requests": 474761,
+      "measured_seconds": 120.01276259699999,
+      "business_requests_per_second": 3955.920934794545,
+      "p95_ms": 9.860891,
+      "list_p95_ms": 10.065194999999997,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true
+    },
+    "pool-30-open-10-idle": {
+      "configuration": {"workload": "mixed", "vus": 10, "duration": "2m", "pool_open": 30, "pool_idle": 10},
+      "workload_requests": 849709,
+      "measured_seconds": 120.008267111,
+      "business_requests_per_second": 7080.420544811912,
+      "p95_ms": 2.2784821999999982,
+      "list_p95_ms": 2.0326926999999997,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true
+    },
+    "baseline-mixed": {
+      "configuration": {
+        "workload": "mixed",
+        "vus": 50,
+        "duration": "1m0s",
+        "hotSet": 1000
+      },
+      "workload_requests": 23058,
+      "measured_seconds": 60.384816752,
+      "business_requests_per_second": 381.8509559232255,
+      "p95_ms": 574.74492325,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": false,
+      "list_p95_ms": 898.3558730499999
+    },
+    "baseline-redirect": {
+      "configuration": {
+        "workload": "redirect",
+        "vus": 50,
+        "duration": "1m0s",
+        "hotSet": 1000
+      },
+      "workload_requests": 855454,
+      "measured_seconds": 60.007990555999996,
+      "business_requests_per_second": 14255.668154754869,
+      "p95_ms": 9.117247599999986,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true
+    },
+    "equal-cpu-mixed": {
+      "configuration": {
+        "rate": 0,
+        "maxVUs": 200,
+        "hotSet": 1000,
+        "workload": "mixed",
+        "vus": 50,
+        "duration": "60s"
+      },
+      "workload_requests": 373597,
+      "measured_seconds": 60.05712084100001,
+      "business_requests_per_second": 6220.694478329895,
+      "p95_ms": 30.968351999999985,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true,
+      "list_p95_ms": 39.52837649999999,
+      "sampled_resource_peaks": {
+        "shortner-load-management-1": {
+          "sampled_peak_cpu_percent": 52.71,
+          "sampled_peak_memory_mib": 18.0
+        },
+        "shortner-load-public-1": {
+          "sampled_peak_cpu_percent": 18.46,
+          "sampled_peak_memory_mib": 14.57
+        },
+        "shortner-load-proxy-1": {
+          "sampled_peak_cpu_percent": 55.07,
+          "sampled_peak_memory_mib": 14.3
+        },
+        "shortner-load-grafana-1": {
+          "sampled_peak_cpu_percent": 0.28,
+          "sampled_peak_memory_mib": 93.88
+        },
+        "shortner-load-postgres-1": {
+          "sampled_peak_cpu_percent": 123.79,
+          "sampled_peak_memory_mib": 250.3
+        },
+        "shortner-load-redis-1": {
+          "sampled_peak_cpu_percent": 6.42,
+          "sampled_peak_memory_mib": 3.957
+        },
+        "shortner-load-prometheus-1": {
+          "sampled_peak_cpu_percent": 0.62,
+          "sampled_peak_memory_mib": 54.64
+        },
+        "shortner-load-k6-run-c481c8003cec": {
+          "sampled_peak_cpu_percent": 57.64,
+          "sampled_peak_memory_mib": 160.7
+        }
+      },
+      "container_states": [
+        "/shortner-load-grafana-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+        "/shortner-load-management-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-postgres-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa",
+        "/shortner-load-prometheus-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+        "/shortner-load-proxy-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+        "/shortner-load-public-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-redis-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf"
+      ]
+    },
+    "final-mixed": {
+      "configuration": {
+        "workload": "mixed",
+        "vus": 50,
+        "duration": "60s",
+        "rate": 0,
+        "maxVUs": 200,
+        "hotSet": 1000
+      },
+      "workload_requests": 410340,
+      "measured_seconds": 60.057539057,
+      "business_requests_per_second": 6832.44778995274,
+      "p95_ms": 33.01225894999999,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true,
+      "list_p95_ms": 41.4742901,
+      "sampled_resource_peaks": {
+        "shortner-load-proxy-1": {
+          "sampled_peak_cpu_percent": 16.69,
+          "sampled_peak_memory_mib": 4.996
+        },
+        "shortner-load-public-1": {
+          "sampled_peak_cpu_percent": 20.15,
+          "sampled_peak_memory_mib": 14.26
+        },
+        "shortner-load-management-1": {
+          "sampled_peak_cpu_percent": 51.91,
+          "sampled_peak_memory_mib": 18.99
+        },
+        "shortner-load-grafana-1": {
+          "sampled_peak_cpu_percent": 0.3,
+          "sampled_peak_memory_mib": 94.68
+        },
+        "shortner-load-postgres-1": {
+          "sampled_peak_cpu_percent": 91.18,
+          "sampled_peak_memory_mib": 252.8
+        },
+        "shortner-load-redis-1": {
+          "sampled_peak_cpu_percent": 7.35,
+          "sampled_peak_memory_mib": 3.945
+        },
+        "shortner-load-prometheus-1": {
+          "sampled_peak_cpu_percent": 0.31,
+          "sampled_peak_memory_mib": 32.21
+        },
+        "shortner-load-k6-run-311d09000b70": {
+          "sampled_peak_cpu_percent": 59.36,
+          "sampled_peak_memory_mib": 175.9
+        }
+      },
+      "container_states": [
+        "/shortner-load-grafana-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+        "/shortner-load-management-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-postgres-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa",
+        "/shortner-load-prometheus-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+        "/shortner-load-proxy-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+        "/shortner-load-public-1 memory_limit=33554432 nano_cpus=1000000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-redis-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf"
+      ]
+    },
+    "final-redirect": {
+      "configuration": {
+        "maxVUs": 200,
+        "hotSet": 1000,
+        "workload": "redirect",
+        "vus": 50,
+        "duration": "60s",
+        "rate": 0
+      },
+      "workload_requests": 1630844,
+      "measured_seconds": 60.002935696,
+      "business_requests_per_second": 27179.403492231424,
+      "p95_ms": 3.95745185,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true,
+      "sampled_resource_peaks": {
+        "shortner-load-proxy-1": {
+          "sampled_peak_cpu_percent": 42.15,
+          "sampled_peak_memory_mib": 4.855
+        },
+        "shortner-load-public-1": {
+          "sampled_peak_cpu_percent": 84.03,
+          "sampled_peak_memory_mib": 15.82
+        },
+        "shortner-load-management-1": {
+          "sampled_peak_cpu_percent": 0.13,
+          "sampled_peak_memory_mib": 16.68
+        },
+        "shortner-load-grafana-1": {
+          "sampled_peak_cpu_percent": 0.35,
+          "sampled_peak_memory_mib": 94.37
+        },
+        "shortner-load-postgres-1": {
+          "sampled_peak_cpu_percent": 84.36,
+          "sampled_peak_memory_mib": 231.5
+        },
+        "shortner-load-redis-1": {
+          "sampled_peak_cpu_percent": 20.51,
+          "sampled_peak_memory_mib": 6.141
+        },
+        "shortner-load-prometheus-1": {
+          "sampled_peak_cpu_percent": 0.16,
+          "sampled_peak_memory_mib": 30.15
+        },
+        "shortner-load-k6-run-0cc6c337b284": {
+          "sampled_peak_cpu_percent": 170.81,
+          "sampled_peak_memory_mib": 640.8
+        }
+      },
+      "container_states": [
+        "/shortner-load-grafana-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+        "/shortner-load-management-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-postgres-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa",
+        "/shortner-load-prometheus-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+        "/shortner-load-proxy-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+        "/shortner-load-public-1 memory_limit=33554432 nano_cpus=1000000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-redis-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf"
+      ]
+    },
+    "final-list": {
+      "configuration": {
+        "maxVUs": 200,
+        "hotSet": 1000,
+        "workload": "list",
+        "vus": 50,
+        "duration": "60s",
+        "rate": 0
+      },
+      "workload_requests": 261157,
+      "measured_seconds": 60.009063065,
+      "business_requests_per_second": 4351.959298500005,
+      "p95_ms": 44.9778058,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true,
+      "list_p95_ms": 44.9778058,
+      "sampled_resource_peaks": {
+        "shortner-load-proxy-1": {
+          "sampled_peak_cpu_percent": 12.45,
+          "sampled_peak_memory_mib": 4.641
+        },
+        "shortner-load-public-1": {
+          "sampled_peak_cpu_percent": 0.09,
+          "sampled_peak_memory_mib": 14.06
+        },
+        "shortner-load-management-1": {
+          "sampled_peak_cpu_percent": 51.13,
+          "sampled_peak_memory_mib": 19.55
+        },
+        "shortner-load-grafana-1": {
+          "sampled_peak_cpu_percent": 0.31,
+          "sampled_peak_memory_mib": 94.68
+        },
+        "shortner-load-postgres-1": {
+          "sampled_peak_cpu_percent": 103.07,
+          "sampled_peak_memory_mib": 243.1
+        },
+        "shortner-load-redis-1": {
+          "sampled_peak_cpu_percent": 0.99,
+          "sampled_peak_memory_mib": 3.859
+        },
+        "shortner-load-prometheus-1": {
+          "sampled_peak_cpu_percent": 0.17,
+          "sampled_peak_memory_mib": 28.09
+        },
+        "shortner-load-k6-run-56daa09b3884": {
+          "sampled_peak_cpu_percent": 60.57,
+          "sampled_peak_memory_mib": 120.7
+        }
+      },
+      "container_states": [
+        "/shortner-load-grafana-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+        "/shortner-load-management-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-postgres-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa",
+        "/shortner-load-prometheus-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+        "/shortner-load-proxy-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+        "/shortner-load-public-1 memory_limit=33554432 nano_cpus=1000000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-redis-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf"
+      ]
+    },
+    "rejected-offered-20k": {
+      "configuration": {
+        "maxVUs": 200,
+        "hotSet": 1000,
+        "workload": "redirect",
+        "vus": 100,
+        "duration": "3m",
+        "rate": 20000
+      },
+      "workload_requests": 3400316,
+      "measured_seconds": 180.01232252300002,
+      "business_requests_per_second": 18889.351308522473,
+      "p95_ms": 12.657593499999999,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": false,
+      "dropped_iterations": 199795,
+      "sampled_resource_peaks": {
+        "shortner-load-proxy-1": {
+          "sampled_peak_cpu_percent": 44.31,
+          "sampled_peak_memory_mib": 7.715
+        },
+        "shortner-load-public-1": {
+          "sampled_peak_cpu_percent": 79.83,
+          "sampled_peak_memory_mib": 22.9
+        },
+        "shortner-load-management-1": {
+          "sampled_peak_cpu_percent": 0.31,
+          "sampled_peak_memory_mib": 19.18
+        },
+        "shortner-load-grafana-1": {
+          "sampled_peak_cpu_percent": 0.51,
+          "sampled_peak_memory_mib": 94.78
+        },
+        "shortner-load-postgres-1": {
+          "sampled_peak_cpu_percent": 52.63,
+          "sampled_peak_memory_mib": 239.9
+        },
+        "shortner-load-redis-1": {
+          "sampled_peak_cpu_percent": 20.93,
+          "sampled_peak_memory_mib": 4.156
+        },
+        "shortner-load-prometheus-1": {
+          "sampled_peak_cpu_percent": 0.18,
+          "sampled_peak_memory_mib": 29.2
+        },
+        "shortner-load-k6-run-58d3e5b13c7b": {
+          "sampled_peak_cpu_percent": 193.01,
+          "sampled_peak_memory_mib": 1432.576
+        }
+      },
+      "container_states": [
+        "/shortner-load-grafana-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f",
+        "/shortner-load-management-1 memory_limit=33554432 nano_cpus=500000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-postgres-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa",
+        "/shortner-load-prometheus-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+        "/shortner-load-proxy-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+        "/shortner-load-public-1 memory_limit=33554432 nano_cpus=1000000000 oom_killed=false restarts=0 image=sha256:15f1a239e5761a4f5451958a0c27a1bb3f145a6d87312be3a2159efc77182074",
+        "/shortner-load-redis-1 memory_limit=0 nano_cpus=0 oom_killed=false restarts=0 image=sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf"
+      ]
+    },
+    "rejected-offered-10k": {
+      "configuration": {
+        "workload": "redirect",
+        "vus": 200,
+        "duration": "3m",
+        "rate": 10000,
+        "maxVUs": 200,
+        "hotSet": 1000
+      },
+      "workload_requests": 1799354,
+      "business_requests_per_second": 9996.220475023072,
+      "p95_ms": 0.975544,
+      "failed_request_rate": 0,
+      "dropped_iterations": 654,
+      "all_thresholds_passed": false
+    },
+    "rejected-warm-offered-10k": {
+      "configuration": {
+        "hotSet": 1000,
+        "workload": "redirect",
+        "vus": 200,
+        "duration": "3m",
+        "rate": 10000,
+        "warmupRequests": 1000,
+        "maxVUs": 200
+      },
+      "workload_requests": 1799242,
+      "business_requests_per_second": 9986.555002561072,
+      "p95_ms": 0.95567,
+      "failed_request_rate": 0,
+      "dropped_iterations": 758,
+      "all_thresholds_passed": false
+    },
+    "rejected-500vu-offered-10k": {
+      "configuration": {
+        "workload": "redirect",
+        "vus": 500,
+        "duration": "3m",
+        "rate": 10000,
+        "warmupRequests": 1000,
+        "maxVUs": 500,
+        "hotSet": 1000
+      },
+      "workload_requests": 1660024,
+      "business_requests_per_second": 9211.230341418699,
+      "p95_ms": 66.77222685,
+      "failed_request_rate": 0,
+      "dropped_iterations": 139950,
+      "all_thresholds_passed": false
+    }
+  }
+}

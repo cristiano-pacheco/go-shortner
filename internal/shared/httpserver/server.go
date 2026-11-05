@@ -23,7 +23,6 @@ type serverParams struct {
 	fx.In
 
 	Lifecycle        fx.Lifecycle
-	Authentication   *APIKeyMiddleware
 	Metrics          *MetricsMiddleware
 	ManagementRoutes []ManagementRoute `group:"management_routes"`
 	PublicRoutes     []PublicRoute     `group:"public_routes"`
@@ -31,6 +30,7 @@ type serverParams struct {
 
 type applicationRoutes struct {
 	params         serverParams
+	authentication *APIKeyMiddleware
 	mu             sync.Mutex
 	activeRequests int
 	stopping       bool
@@ -63,6 +63,13 @@ func newApplicationRoutes(params serverParams) *applicationRoutes {
 	return routes
 }
 
+func newManagementApplicationRoutes(params serverParams, authentication *APIKeyMiddleware) *applicationRoutes {
+	routes := newApplicationRoutes(params)
+	routes.authentication = authentication
+
+	return routes
+}
+
 func (routes *applicationRoutes) Setup(server *chi.Server) {
 	router := chiv5.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
@@ -76,13 +83,17 @@ func (routes *applicationRoutes) Setup(server *chi.Server) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	router.Route("/api/v1", func(r chiv5.Router) {
-		r.Use(routes.params.Authentication.Authenticate)
 
-		for _, register := range routes.params.ManagementRoutes {
-			register(r)
-		}
-	})
+	if routes.authentication != nil {
+		router.Route("/api/v1", func(r chiv5.Router) {
+			r.Use(routes.authentication.Authenticate)
+
+			for _, register := range routes.params.ManagementRoutes {
+				register(r)
+			}
+		})
+	}
+
 	router.Group(func(r chiv5.Router) {
 		for _, register := range routes.params.PublicRoutes {
 			register(r)

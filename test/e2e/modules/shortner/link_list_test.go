@@ -77,6 +77,54 @@ func (s *ListLinkSuite) TestOnlyDeletedLinksProduceEmptyList() {
 	s.Equal(2, response.Data.PageSize)
 }
 
+func (s *ListLinkSuite) TestTotalTracksBulkMutationsAndTruncate() {
+	s.seedLinks(7)
+	s.Equal(7, s.list("").Data.Total)
+
+	s.sql(`UPDATE links SET active = false, destination = 'https://changed.example' WHERE id IN (1, 2, 3)`)
+	s.Equal(7, s.list("").Data.Total)
+
+	s.sql(`UPDATE links SET deleted_at = now() WHERE id IN (1, 2, 3)`)
+	s.Equal(4, s.list("").Data.Total)
+
+	s.sql(`UPDATE links SET deleted_at = NULL WHERE id IN (1, 2)`)
+	s.Equal(6, s.list("").Data.Total)
+
+	// Deleting a previously soft-deleted row must not decrement the total twice.
+	s.sql(`DELETE FROM links WHERE id IN (1, 3, 7)`)
+	s.Equal(4, s.list("").Data.Total)
+
+	s.sql(`TRUNCATE TABLE links RESTART IDENTITY`)
+	response := s.list("")
+	s.Equal(0, response.Data.Total)
+	s.NotNil(response.Data.Items)
+	s.Empty(response.Data.Items)
+
+	s.seedLinks(3)
+	s.Equal(3, s.list("").Data.Total)
+}
+
+func (s *ListLinkSuite) TestTotalRollsBackWithMutations() {
+	s.seedLinks(5)
+	s.sql(`BEGIN;
+UPDATE links SET deleted_at = now() WHERE id IN (1, 2);
+INSERT INTO links (code, destination) VALUES ('rolled-back', 'https://rollback.example');
+DELETE FROM links WHERE id = 3;
+ROLLBACK;`)
+	response := s.list("")
+	s.Equal(5, response.Data.Total)
+	s.Require().Len(response.Data.Items, 5)
+	s.Equal([]int64{5, 4, 3, 2, 1}, []int64{
+		response.Data.Items[0].ID, response.Data.Items[1].ID, response.Data.Items[2].ID,
+		response.Data.Items[3].ID, response.Data.Items[4].ID,
+	})
+
+	s.sql(`BEGIN; TRUNCATE TABLE links; ROLLBACK;`)
+	response = s.list("")
+	s.Equal(5, response.Data.Total)
+	s.Len(response.Data.Items, 5)
+}
+
 func (s *ListLinkSuite) TestUnknownQueryParameterDoesNotChangePagination() {
 	s.seedLinks(3)
 	response := s.list("?ignored=value&page_size=2")

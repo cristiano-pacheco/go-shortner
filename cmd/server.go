@@ -16,21 +16,18 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
-func runServer(cmd *cobra.Command, _ []string) (runErr error) {
+func runServer(cmd *cobra.Command, options ...fx.Option) (runErr error) {
 	const (
 		startupTimeout  = 10 * time.Second
 		shutdownTimeout = 30 * time.Second
 	)
 
-	app := fx.New(
+	app := fx.New(fx.Options(options...),
 		fx.NopLogger,
-		fx.Provide(config.Load, logger.DefaultConfig),
+		fx.Provide(logger.DefaultConfig),
 		trace.Module,
 		validator.Module,
 		fx.Provide(fx.Annotate(metrics.NewRegistry,
@@ -42,8 +39,6 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 		database.Module,
 		redis.ClientModule,
 		fx.Invoke(metrics.RegisterPoolMetrics),
-		shortener.Module,
-		httpserver.Module,
 		chi.Module,
 	)
 	if err := app.Err(); err != nil {

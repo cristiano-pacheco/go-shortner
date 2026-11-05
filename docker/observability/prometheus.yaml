@@ -5,3 +5,8 @@ scrape_configs:
   - job_name: shortener
     static_configs:
       - targets: ["app:9090"]
+        labels:
+          role: management
+      - targets: ["public:9090"]
+        labels:
+          role: public

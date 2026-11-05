@@ -6,7 +6,7 @@ Management routes require `X-API-Key`. Set `API_KEY` in your shell to the value 
 set -a; . ./.env; set +a
 ```
 
-Avoid putting credentials in shell history or scripts. The examples assume the default address and a new database. Replace `1` with the returned `id`; sequence values are not guaranteed to be consecutive.
+Keep credentials out of shell history and scripts. Examples use management port 8080 and public port 8081. Each server exposes only its own routes plus `/health`. Replace `1` with the returned link ID. IDs need not be consecutive.
 
 ## Create a link
 
@@ -49,7 +49,7 @@ curl -i -X PATCH http://localhost:8080/api/v1/links/1 \
 Request the public URL without an API key. The response contains a `Location` header.
 
 ```sh
-curl -i http://localhost:8080/example
+curl -i http://localhost:8081/example
 ```
 
 ## Inspect redirect headers
@@ -57,7 +57,7 @@ curl -i http://localhost:8080/example
 Use HEAD to retrieve the redirect headers without a response body.
 
 ```sh
-curl -I http://localhost:8080/example
+curl -I http://localhost:8081/example
 ```
 
 ## Delete a link

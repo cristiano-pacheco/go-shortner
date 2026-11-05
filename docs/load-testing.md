@@ -1,37 +1,86 @@
 # Load testing
 
-Requires Docker, Docker Compose and curl. Run from the repository root:
+Requires Docker, Docker Compose, curl and tar. Run from the repository root.
 
 ```sh
-make test-load
+LOAD_OPEN_BROWSER=0 LOAD_VUS=50 LOAD_DURATION=60s make test-load
 ```
 
-The isolated stack runs two app instances behind Nginx, each limited to 0.5 CPU and 128 MiB. The command opens the Shortener and k6 Grafana dashboards, runs k6, then opens the HTML report. Reports are saved under `reports/load/`.
+The command builds the image, starts the stack, runs migrations, seeds one million links and runs k6. Failed gates return a nonzero exit code. The stack stays running.
 
-Set `LOAD_OPEN_BROWSER=0` for headless use. URLs and report paths are printed to the terminal. Grafana is available without login on localhost; tracing and its Tempo link are unavailable in this stack.
+## Workloads
 
-Configure the load and ports as needed:
+| `LOAD_WORKLOAD` | Requests per iteration |
+| --- | --- |
+| `mixed`, default | Create, get, list, update, redirect GET/HEAD, soft delete |
+| `redirect` | One GET or HEAD over a seeded 1,000-code set |
+| `list` | Page 1, 20 items, exact total |
+
+Defaults are 10 virtual users for 2 minutes. Override with `LOAD_VUS` and `LOAD_DURATION`.
 
 ```sh
-LOAD_VUS=50 LOAD_DURATION=5m LOAD_PORT=8089 LOAD_GRAFANA_PORT=3002 LOAD_PROMETHEUS_PORT=9093 make test-load
+LOAD_OPEN_BROWSER=0 LOAD_WORKLOAD=redirect LOAD_VUS=50 LOAD_DURATION=60s make test-load
 ```
 
-Before k6 starts, the script seeds one million active links and runs `ANALYZE` on the isolated database. Set `LOAD_SEED_COUNT` to change the seed target (or `0` to skip insertion). Increasing the target adds seed links; repeating or lowering it does not change existing seed links. Seeding can take time and disk space.
-
-By default, 10 virtual users run for 2 minutes. Each iteration creates, retrieves, lists, updates and deletes a link, and requests its redirect with GET and HEAD. Thresholds require fewer than 1% failed requests, over 99% passing checks per operation and overall, and p95 latency below 500 ms. Readiness requests are excluded from request thresholds. These thresholds are examples, not SLOs.
-
-Each iteration leaves a soft-deleted row in PostgreSQL. Data persists across runs; failed iterations may leave active links. The test measures a mixed workload, not redirect performance alone. The generator shares the host with the stack; use `docker stats` to check resource saturation.
-
-Only one script execution can run per Docker daemon. If a forced termination leaves the lock behind, confirm no test is running and remove it:
+`LOAD_RATE` enables constant-arrival-rate execution in iterations per second. Mixed iterations make seven requests. `LOAD_VUS` preallocates users. `LOAD_MAX_VUS` caps them at 200 by default.
 
 ```sh
-docker network rm shortner-load-run-lock
+# Offer a rate. This does not guarantee the application can sustain it.
+LOAD_OPEN_BROWSER=0 LOAD_WORKLOAD=redirect LOAD_RATE=10000 \
+  LOAD_VUS=200 LOAD_MAX_VUS=200 LOAD_DURATION=3m make test-load
 ```
 
-Stop the stack and remove its database volume:
+Gates require less than 1% failed requests, over 99% passing checks and p95 below 500 ms overall and per operation. Arrival-rate tests also require zero dropped iterations. These are test gates, not production SLOs. See [results and failed trials](performance.md).
+
+## Settings
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `LOAD_SEED_COUNT` | `1000000` | Seed target. `0` skips insertion. Lowering it does not remove rows. |
+| `LOAD_HOT_SET` | `1000` | Redirect working-set size. |
+| `LOAD_WARMUP_REQUESTS` | `0` | Prime redirects and upstream connections before timing. |
+| `LOAD_SKIP_BUILD` | `0` | `1` reuses the image. Build the current source first. |
+| `LOAD_PUBLIC_CPUS` | `1.0` | Public CPU cap. Use `0.5` for the equal-total-CPU comparison. |
+| `LOAD_MANAGEMENT_CPUS` | `0.5` | Management CPU cap. |
+
+Each Go server has a 32 MiB limit, no swap, `GOMEMLIMIT=24MiB` and `GOMAXPROCS=1`. The combined 64 MiB excludes database, cache, proxy, generator and monitoring resources. Tracing is disabled. Metrics remain enabled.
+
+Data persists. Mixed iterations leave soft-deleted rows. Failed iterations may leave active links. The script runs `ANALYZE` before each test.
+
+Readiness and warmup requests do not count toward workload gates. Global HTTP totals include them. Business throughput uses `passes + fails` from `http_req_failed{phase:workload}`, divided by `state.testRunDurationMs / 1000`.
+
+CPU and memory samples are not continuous peaks. The generator may limit throughput. Each run checks OOM state, restarts and exact-count consistency.
+
+## Dashboards
+
+| Service | Default address | Port override |
+| --- | --- | --- |
+| Nginx | http://localhost:8088 | `LOAD_PORT` |
+| Grafana | http://localhost:3001 | `LOAD_GRAFANA_PORT` |
+| Prometheus | http://localhost:9092 | `LOAD_PROMETHEUS_PORT` |
+
+Grafana requires no login. Set `LOAD_OPEN_BROWSER=0` to suppress browser opening. This stack has no Tempo service.
+
+## Check migrations
+
+With the load database running:
+
+```sh
+./scripts/check-link-counts.sh
+```
+
+This checks backfill, mutations, rollback, truncation and up/down migrations in a temporary schema. It preserves load data. Each load run also reconciles totals after completion.
+
+## Cleanup
+
+Remove the stack and its database volume:
 
 ```sh
 docker compose -p shortner-load -f docker/docker-compose.load.yaml down -v --remove-orphans
 ```
 
-Reports are retained. Remove `reports/load/` separately if needed.
+Only one load script can run per Docker daemon. After a forced termination, confirm no test is running before removing a stale lock:
+
+```sh
+docker network rm shortner-load-run-lock
+```
