@@ -3,7 +3,7 @@ module github.com/cristiano-pacheco/go-shortner
 go 1.27.3
 
 require (
-	github.com/cristiano-pacheco/bricks v0.2.0
+	github.com/cristiano-pacheco/bricks v0.2.1
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-playground/validator/v10 v10.30.5
 	github.com/jackc/pgx/v5 v5.12.0
