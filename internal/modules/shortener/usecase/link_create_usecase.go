@@ -70,7 +70,7 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
-		return LinkCreateOutput{}, err
+		return LinkCreateOutput{}, errs.ValidationError(err)
 	}
 
 	if err := uc.destinationValidator.Validate(input.Destination); err != nil {
@@ -83,9 +83,11 @@ func (uc *LinkCreateUseCase) Execute(ctx context.Context, input LinkCreateInput)
 		return LinkCreateOutput{}, err
 	}
 
-	if input.Alias != nil && !uc.validAlias(*input.Alias) {
-		uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(errs.ErrInvalidInput))
-		return LinkCreateOutput{}, errs.ErrInvalidInput
+	if input.Alias != nil {
+		if err := uc.validateAlias(*input.Alias); err != nil {
+			uc.applicationMetrics.IncrementCreateError(errs.MetricCategory(err))
+			return LinkCreateOutput{}, err
+		}
 	}
 
 	output, err := uc.create(ctx, input)
@@ -140,7 +142,7 @@ func (uc *LinkCreateUseCase) create(ctx context.Context, input LinkCreateInput) 
 
 	uc.applicationMetrics.IncrementCodeRetriesExhausted()
 
-	return LinkCreateOutput{}, errors.New("automatic code generation exhausted retries")
+	return LinkCreateOutput{}, errs.ErrCodeGenerationExhausted
 }
 
 func (uc *LinkCreateUseCase) normalizeExpiration(input *LinkCreateInput) error {
@@ -150,7 +152,7 @@ func (uc *LinkCreateUseCase) normalizeExpiration(input *LinkCreateInput) error {
 
 	expiration := input.ExpiresAt.UTC().Truncate(time.Microsecond)
 	if !expiration.After(time.Now()) {
-		return errs.ErrInvalidInput
+		return errs.ErrExpirationInPast
 	}
 
 	input.ExpiresAt = &expiration
@@ -170,16 +172,20 @@ func (uc *LinkCreateUseCase) code(alias *string) (string, error) {
 	return code, err
 }
 
-func (uc *LinkCreateUseCase) validAlias(alias string) bool {
-	if len(alias) < 3 || len(alias) > 32 || alias == "api" || alias == "health" {
-		return false
+func (uc *LinkCreateUseCase) validateAlias(alias string) error {
+	if len(alias) < 3 || len(alias) > 32 {
+		return errs.ErrAliasLength
+	}
+
+	if alias == "api" || alias == "health" {
+		return errs.ErrAliasReserved
 	}
 
 	for _, c := range alias {
 		if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", c) {
-			return false
+			return errs.ErrAliasCharacters
 		}
 	}
 
-	return true
+	return nil
 }

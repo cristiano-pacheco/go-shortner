@@ -47,7 +47,7 @@ func (uc *LinkDeleteUseCase) Execute(ctx context.Context, input LinkDeleteInput)
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementDeleteError(errs.MetricCategory(err))
-		return LinkDeleteOutput{}, err
+		return LinkDeleteOutput{}, errs.ValidationError(err)
 	}
 
 	link, err := uc.linkRepository.Delete(ctx, input.ID)

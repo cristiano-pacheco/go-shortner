@@ -17,6 +17,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/cache"
+	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/repository"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
@@ -184,7 +185,7 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 	require.Equal(t, 2, generator.calls)
 
 	_, err = create.Execute(ctx, usecase.LinkCreateInput{Destination: "https://example.com/exhausted"})
-	require.ErrorContains(t, err, "automatic code generation exhausted retries")
+	require.ErrorIs(t, err, errs.ErrCodeGenerationExhausted)
 	require.Equal(t, 7, generator.calls)
 
 	resolved, err := resolve.Execute(ctx, usecase.LinkResolveInput{Code: created.Code})

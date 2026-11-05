@@ -175,11 +175,13 @@ func (s *UpdateLinkSuite) TestInvalidDestinationLeavesDatabaseUnchanged() {
 
 	var response struct {
 		Error struct {
-			Code string `json:"code"`
+			Code    string `json:"code"`
+			Message string `json:"message"`
 		} `json:"error"`
 	}
 	s.Require().NoError(json.Unmarshal(body, &response))
-	s.Equal("invalid_argument", response.Error.Code)
+	s.Equal("SHORTENER_33", response.Error.Code)
+	s.Equal("destination scheme must be HTTP or HTTPS", response.Error.Message)
 	s.Equal(before, s.persistedLinks())
 }
 
@@ -233,4 +235,32 @@ func (s *UpdateLinkSuite) TestDeletedLinkCannotBeUpdated() {
 		http.StatusNotFound,
 	)
 	s.Equal(before, s.persistedLinks())
+}
+
+func (s *UpdateLinkSuite) TestUpdateFieldErrorsAreDescriptive() {
+	before := s.fixture()
+	cases := []struct {
+		body    string
+		code    string
+		message string
+	}{
+		{`{"destination":null}`, "SHORTENER_32", "destination must be a valid URL string"},
+		{`{"active":null}`, "SHORTENER_47", "active must be a boolean"},
+		{`{"expires_at":"tomorrow"}`, "SHORTENER_48", "expiration must be an RFC3339 timestamp or null"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.body, func() {
+			_, body := s.http.expect(s.T(), http.MethodPatch, "/api/v1/links/1", tc.body, apiKey, "application/json", http.StatusBadRequest)
+			var response struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			s.Require().NoError(json.Unmarshal(body, &response))
+			s.Equal(tc.code, response.Error.Code)
+			s.Equal(tc.message, response.Error.Message)
+			s.Equal(before, s.persistedLinks())
+		})
+	}
 }

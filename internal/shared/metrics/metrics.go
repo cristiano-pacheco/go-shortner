@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
@@ -465,7 +466,7 @@ func RegisterPoolMetrics(
 		OnStart: func(context.Context) error {
 			sqlDB, err := database.DB.DB()
 			if err != nil {
-				return fmt.Errorf("get PostgreSQL pool for metrics: %w", err)
+				return fmt.Errorf("%w: %w", sharederrs.ErrMetricsPoolRead, err)
 			}
 
 			poolCollectors := []prometheus.Collector{
@@ -565,7 +566,7 @@ func RegisterPoolMetrics(
 			for _, collector := range poolCollectors {
 				if registerErr := registerer.Register(collector); registerErr != nil {
 					unregister()
-					return fmt.Errorf("register pool metrics: %w", registerErr)
+					return fmt.Errorf("%w: %w", sharederrs.ErrMetricsPoolRegister, registerErr)
 				}
 
 				registered = append(registered, collector)

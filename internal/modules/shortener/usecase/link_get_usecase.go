@@ -58,7 +58,7 @@ func (uc *LinkGetUseCase) Execute(ctx context.Context, input LinkGetInput) (Link
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementGetError(errs.MetricCategory(err))
-		return LinkGetOutput{}, err
+		return LinkGetOutput{}, errs.ValidationError(err)
 	}
 
 	link, err := uc.linkRepository.FindByID(ctx, input.ID)

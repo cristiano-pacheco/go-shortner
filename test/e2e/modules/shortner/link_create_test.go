@@ -114,34 +114,43 @@ func (s *CreateLinkSuite) TestAliasAndExpirationArePersisted() {
 	s.True(item.UpdatedAt.Equal(rows[0].UpdatedAt))
 }
 
-func (s *CreateLinkSuite) rejectedCreate(body, key, media string, status int) {
+func (s *CreateLinkSuite) rejectedCreate(body, key, media string, status int, code, message string) {
 	s.T().Helper()
-	s.http.expect(s.T(), http.MethodPost, "/api/v1/links", body, key, media, status)
+	_, responseBody := s.http.expect(s.T(), http.MethodPost, "/api/v1/links", body, key, media, status)
+	var response struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(responseBody, &response))
+	s.Equal(code, response.Error.Code)
+	s.Equal(message, response.Error.Message)
 	s.Empty(s.persistedLinks())
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingAuthentication() {
-	s.rejectedCreate(`{"destination":"https://example.com"}`, "", "application/json", 401)
+	s.rejectedCreate(`{"destination":"https://example.com"}`, "", "application/json", 401, "SHORTENER_29", "API key is missing or invalid")
 }
 
 func (s *CreateLinkSuite) TestRejectsInvalidAuthentication() {
-	s.rejectedCreate(`{"destination":"https://example.com"}`, "wrong", "application/json", 401)
+	s.rejectedCreate(`{"destination":"https://example.com"}`, "wrong", "application/json", 401, "SHORTENER_29", "API key is missing or invalid")
 }
 
 func (s *CreateLinkSuite) TestRejectsUnsupportedMedia() {
-	s.rejectedCreate(`{}`, apiKey, "text/plain", 415)
+	s.rejectedCreate(`{}`, apiKey, "text/plain", 415, "SHORTENER_26", "Content-Type header is not application/json")
 }
 
 func (s *CreateLinkSuite) TestRejectsUnknownField() {
-	s.rejectedCreate(`{"destination":"https://example.com","unknown":true}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://example.com","unknown":true}`, apiKey, "application/json", 400, "SHORTENER_56", "request body contains an unknown field")
 }
 
 func (s *CreateLinkSuite) TestRejectsMalformedJSON() {
-	s.rejectedCreate(`{"destination":`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":`, apiKey, "application/json", 400, "SHORTENER_28", "request body contains malformed JSON")
 }
 
 func (s *CreateLinkSuite) TestRejectsTrailingJSON() {
-	s.rejectedCreate(`{} {}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{} {}`, apiKey, "application/json", 400, "SHORTENER_58", "request body must contain only one JSON value")
 }
 
 func (s *CreateLinkSuite) TestRejectsOversizedBody() {
@@ -150,48 +159,45 @@ func (s *CreateLinkSuite) TestRejectsOversizedBody() {
 		apiKey,
 		"application/json",
 		413,
+		"SHORTENER_27",
+		"Request body is too large",
 	)
 }
 
 func (s *CreateLinkSuite) TestRejectsMissingDestination() {
-	_, body := s.http.expect(
-		s.T(),
-		http.MethodPost,
-		"/api/v1/links",
-		`{}`,
-		apiKey,
-		"application/json",
-		http.StatusBadRequest,
-	)
+	s.rejectedCreate(`{}`, apiKey, "application/json", 400, "SHORTENER_31", "destination is required")
+}
 
-	var response struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	s.Require().NoError(json.Unmarshal(body, &response))
-	s.Equal("invalid_argument", response.Error.Code)
-	s.Empty(s.persistedLinks())
+func (s *CreateLinkSuite) TestRejectsEmptyBody() {
+	s.rejectedCreate(``, apiKey, "application/json", 400, "SHORTENER_55", "request body must not be empty")
+}
+
+func (s *CreateLinkSuite) TestRejectsInvalidFieldType() {
+	s.rejectedCreate(`{"destination":42}`, apiKey, "application/json", 400, "SHORTENER_60", "destination must be a string")
+}
+
+func (s *CreateLinkSuite) TestRejectsInvalidTimestamp() {
+	s.rejectedCreate(`{"destination":"https://example.com","expires_at":"tomorrow"}`, apiKey, "application/json", 400, "SHORTENER_48", "expiration must be an RFC3339 timestamp or null")
 }
 
 func (s *CreateLinkSuite) TestRejectsRelativeDestination() {
-	s.rejectedCreate(`{"destination":"/relative"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"/relative"}`, apiKey, "application/json", 400, "SHORTENER_33", "destination scheme must be HTTP or HTTPS")
 }
 
 func (s *CreateLinkSuite) TestRejectsUnsupportedScheme() {
-	s.rejectedCreate(`{"destination":"ftp://example.com"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"ftp://example.com"}`, apiKey, "application/json", 400, "SHORTENER_33", "destination scheme must be HTTP or HTTPS")
 }
 
 func (s *CreateLinkSuite) TestRejectsDestinationCredentials() {
-	s.rejectedCreate(`{"destination":"https://u:p@example.com"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://u:p@example.com"}`, apiKey, "application/json", 400, "SHORTENER_35", "destination must not include credentials")
 }
 
 func (s *CreateLinkSuite) TestRejectsDestinationWhitespace() {
-	s.rejectedCreate(`{"destination":"https://example.com/ "}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://example.com/ "}`, apiKey, "application/json", 400, "SHORTENER_36", "destination must not contain whitespace")
 }
 
 func (s *CreateLinkSuite) TestRejectsShortAlias() {
-	s.rejectedCreate(`{"destination":"https://example.com","alias":"ab"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://example.com","alias":"ab"}`, apiKey, "application/json", 400, "SHORTENER_38", "alias must be between 3 and 32 characters")
 }
 
 func (s *CreateLinkSuite) TestRejectsLongAlias() {
@@ -200,15 +206,17 @@ func (s *CreateLinkSuite) TestRejectsLongAlias() {
 		apiKey,
 		"application/json",
 		400,
+		"SHORTENER_38",
+		"alias must be between 3 and 32 characters",
 	)
 }
 
 func (s *CreateLinkSuite) TestRejectsInvalidAlias() {
-	s.rejectedCreate(`{"destination":"https://example.com","alias":"abc.def"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://example.com","alias":"abc.def"}`, apiKey, "application/json", 400, "SHORTENER_40", "alias may only contain letters, numbers, hyphens, and underscores")
 }
 
 func (s *CreateLinkSuite) TestRejectsReservedAlias() {
-	s.rejectedCreate(`{"destination":"https://example.com","alias":"health"}`, apiKey, "application/json", 400)
+	s.rejectedCreate(`{"destination":"https://example.com","alias":"health"}`, apiKey, "application/json", 400, "SHORTENER_39", "alias is reserved")
 }
 
 func (s *CreateLinkSuite) TestRejectsExpiredLink() {
@@ -217,6 +225,8 @@ func (s *CreateLinkSuite) TestRejectsExpiredLink() {
 		apiKey,
 		"application/json",
 		400,
+		"SHORTENER_41",
+		"expiration must be in the future",
 	)
 }
 
@@ -234,7 +244,7 @@ func (s *CreateLinkSuite) TestDuplicateAliasDoesNotChangeExistingRow() {
 	s.create("duplicate-e2e")
 	before := s.persistedLinks()
 	s.Require().Len(before, 1)
-	s.http.expect(
+	_, body := s.http.expect(
 		s.T(),
 		http.MethodPost,
 		"/api/v1/links",
@@ -243,5 +253,12 @@ func (s *CreateLinkSuite) TestDuplicateAliasDoesNotChangeExistingRow() {
 		"application/json",
 		http.StatusConflict,
 	)
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &response))
+	s.Equal("SHORTENER_02", response.Error.Code)
 	s.Equal(before, s.persistedLinks())
 }

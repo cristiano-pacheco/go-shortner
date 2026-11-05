@@ -51,22 +51,23 @@ func (s *DestinationValidatorSuite) TestValidateRejectsInvalidDestinations() {
 	cases := []struct {
 		name        string
 		destination string
+		want        error
 	}{
-		{"empty", ""},
-		{"missing scheme", "example.com/path"},
-		{"unsupported scheme", "ftp://example.com"},
-		{"missing host", "https:///path"},
-		{"credentials", "https://user:password@example.com"},
-		{"empty credentials", "https://@example.com"},
-		{"space", "https://example.com/a b"},
-		{"unicode whitespace", "https://example.com/a\u00a0b"},
-		{"malformed escape", "https://example.com/%zz"},
-		{"above maximum length", prefix + strings.Repeat("a", 4097-len(prefix))},
+		{"empty", "", errs.ErrDestinationRequired},
+		{"missing scheme", "example.com/path", errs.ErrDestinationScheme},
+		{"unsupported scheme", "ftp://example.com", errs.ErrDestinationScheme},
+		{"missing host", "https:///path", errs.ErrDestinationHost},
+		{"credentials", "https://user:password@example.com", errs.ErrDestinationCredentials},
+		{"empty credentials", "https://@example.com", errs.ErrDestinationCredentials},
+		{"space", "https://example.com/a b", errs.ErrDestinationWhitespace},
+		{"unicode whitespace", "https://example.com/a\u00a0b", errs.ErrDestinationWhitespace},
+		{"malformed escape", "https://example.com/%zz", errs.ErrInvalidDestination},
+		{"above maximum length", prefix + strings.Repeat("a", 4097-len(prefix)), errs.ErrDestinationTooLong},
 	}
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			s.ErrorIs(s.validator.Validate(tc.destination), errs.ErrInvalidInput)
+			s.ErrorIs(s.validator.Validate(tc.destination), tc.want)
 		})
 	}
 }

@@ -67,12 +67,12 @@ func (uc *LinkListUseCase) Execute(ctx context.Context, input LinkListInput) (Li
 
 	if err := uc.validator.Validate(input); err != nil {
 		uc.applicationMetrics.IncrementListError(errs.MetricCategory(err))
-		return LinkListOutput{}, err
+		return LinkListOutput{}, errs.ValidationError(err)
 	}
 
 	if input.Page-1 > math.MaxInt/input.PageSize {
-		uc.applicationMetrics.IncrementListError(errs.MetricCategory(errs.ErrInvalidInput))
-		return LinkListOutput{}, errs.ErrInvalidInput
+		uc.applicationMetrics.IncrementListError(errs.MetricCategory(errs.ErrPaginationOverflow))
+		return LinkListOutput{}, errs.ErrPaginationOverflow
 	}
 
 	links, total, err := uc.linkRepository.List(ctx, input.PageSize, (input.Page-1)*input.PageSize)

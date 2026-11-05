@@ -1,13 +1,14 @@
 package config
 
 import (
-	"errors"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 
 	bricksconfig "github.com/cristiano-pacheco/bricks/pkg/config"
+
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 
 type Config struct {
@@ -42,13 +43,25 @@ func Load() (Config, error) {
 }
 
 func validateDatabase(cfg *Config) error {
-	if cfg.DatabaseHost == "" || cfg.DatabaseName == "" || cfg.DatabaseUser == "" || cfg.DatabasePassword == "" {
-		return errors.New("database settings are required")
+	if cfg.DatabaseHost == "" {
+		return sharederrs.ErrDatabaseHostRequired
+	}
+
+	if cfg.DatabaseName == "" {
+		return sharederrs.ErrDatabaseNameRequired
+	}
+
+	if cfg.DatabaseUser == "" {
+		return sharederrs.ErrDatabaseUserRequired
+	}
+
+	if cfg.DatabasePassword == "" {
+		return sharederrs.ErrDatabasePasswordRequired
 	}
 
 	port, err := strconv.Atoi(cfg.DatabasePort)
 	if err != nil || port < 1 || port > 65535 {
-		return errors.New("database port must be between 1 and 65535")
+		return sharederrs.ErrDatabasePortInvalid
 	}
 
 	if cfg.DatabaseSSLMode == "" {
@@ -58,7 +71,7 @@ func validateDatabase(cfg *Config) error {
 	switch cfg.DatabaseSSLMode {
 	case "disable", "require", "verify-ca", "verify-full":
 	default:
-		return errors.New("invalid database SSL mode")
+		return sharederrs.ErrDatabaseSSLModeInvalid
 	}
 
 	return nil
@@ -66,18 +79,18 @@ func validateDatabase(cfg *Config) error {
 
 func validateEndpoints(cfg *Config) error {
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		return errors.New("API key is required")
+		return sharederrs.ErrAPIKeyRequired
 	}
 
 	u, err := url.Parse(cfg.PublicBaseURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil ||
 		u.RawQuery != "" ||
 		u.Fragment != "" {
-		return errors.New("public base URL must be an absolute HTTP or HTTPS URL")
+		return sharederrs.ErrPublicBaseURLInvalid
 	}
 
 	if cfg.RedisURL == "" {
-		return errors.New("Redis URL is required") //nolint:staticcheck // Redis is a proper name.
+		return sharederrs.ErrRedisURLRequired
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -85,7 +98,7 @@ func validateEndpoints(cfg *Config) error {
 	}
 
 	if _, _, splitErr := net.SplitHostPort(cfg.HTTPAddr); splitErr != nil {
-		return errors.New("HTTP address must include a port")
+		return sharederrs.ErrHTTPAddressInvalid
 	}
 
 	return nil

@@ -28,8 +28,9 @@ func (h *LinkRedirectHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 	output, err := h.linkResolveUseCase.Execute(r.Context(), usecase.LinkResolveInput{Code: chi.URLParam(r, "code")})
 	if err != nil {
 		var validationErrors playgroundvalidator.ValidationErrors
-		if errors.Is(err, errs.ErrLinkNotFound) || errors.As(err, &validationErrors) {
-			err = errLinkNotFound
+		if errors.Is(err, errs.ErrLinkNotFound) || errors.Is(err, errs.ErrCodeRequired) ||
+			errors.As(err, &validationErrors) {
+			err = errs.ErrLinkNotFound
 		}
 
 		h.errorHandler.Error(w, err)

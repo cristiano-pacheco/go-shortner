@@ -3,11 +3,13 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
-	brickserrs "github.com/cristiano-pacheco/bricks/pkg/errs"
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 
 // ReadJSON decodes one JSON value from the body bounded by the server middleware.
@@ -18,12 +20,7 @@ func ReadJSON(r *http.Request, dst any) error {
 
 	contentType, _, _ := strings.Cut(header, ";")
 	if header != "" && strings.TrimSpace(contentType) != "application/json" {
-		return brickserrs.New(
-			"UNSUPPORTED_MEDIA_TYPE",
-			"Content-Type header is not application/json",
-			http.StatusUnsupportedMediaType,
-			nil,
-		)
+		return sharederrs.ErrUnsupportedMediaType
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -35,7 +32,11 @@ func ReadJSON(r *http.Request, dst any) error {
 
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return jsonRequestError(err)
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return sharederrs.ErrRequestTooLarge
+		}
+
+		return sharederrs.ErrTrailingJSON
 	}
 
 	return nil
@@ -43,13 +44,28 @@ func ReadJSON(r *http.Request, dst any) error {
 
 func jsonRequestError(err error) error {
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return brickserrs.New(
-			"REQUEST_ENTITY_TOO_LARGE",
-			"Request body is too large",
-			http.StatusRequestEntityTooLarge,
-			nil,
-		)
+		return sharederrs.ErrRequestTooLarge
 	}
 
-	return brickserrs.New("BAD_REQUEST", "Invalid JSON request body", http.StatusBadRequest, nil)
+	if errors.Is(err, io.EOF) {
+		return sharederrs.ErrEmptyJSONBody
+	}
+
+	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return fmt.Errorf("%w: %w", sharederrs.ErrInvalidJSONFieldType, err)
+	}
+
+	if _, ok := errors.AsType[*time.ParseError](err); ok {
+		return sharederrs.ErrInvalidJSONTime
+	}
+
+	if strings.HasPrefix(err.Error(), "Time.UnmarshalJSON:") {
+		return sharederrs.ErrInvalidJSONTime
+	}
+
+	if strings.HasPrefix(err.Error(), "json: unknown field ") {
+		return sharederrs.ErrUnknownJSONField
+	}
+
+	return sharederrs.ErrMalformedJSON
 }
