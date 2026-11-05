@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	bricksconfig "github.com/cristiano-pacheco/bricks/pkg/config"
+
 	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 

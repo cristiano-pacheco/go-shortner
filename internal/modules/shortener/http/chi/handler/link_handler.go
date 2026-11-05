@@ -129,35 +129,9 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, param := range []struct {
-		name  string
-		value *int
-	}{{"page", &input.Page}, {"page_size", &input.PageSize}} {
-		values, ok := query[param.name]
-		if !ok {
-			continue
-		}
-
-		if len(values) != 1 {
-			if param.name == "page" {
-				h.errorHandler.Error(w, errs.ErrPageRepeated)
-			} else {
-				h.errorHandler.Error(w, errs.ErrPageSizeRepeated)
-			}
-			return
-		}
-
-		value, parseErr := strconv.Atoi(values[0])
-		if parseErr != nil {
-			if param.name == "page" {
-				h.errorHandler.Error(w, errs.ErrInvalidPage)
-			} else {
-				h.errorHandler.Error(w, errs.ErrInvalidPageSize)
-			}
-			return
-		}
-
-		*param.value = value
+	if err = h.parseListPagination(query, &input); err != nil {
+		h.errorHandler.Error(w, err)
+		return
 	}
 
 	output, err := h.linkListUseCase.Execute(r.Context(), input)
@@ -170,6 +144,36 @@ func (h *LinkHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err = response.JSON(w, http.StatusOK, mapper.ToLinkListResponse(output), nil); err != nil {
 		h.applicationLogger.Error("write link list response", logger.Error(err))
 	}
+}
+
+func (h *LinkHandler) parseListPagination(query url.Values, input *usecase.LinkListInput) error {
+	for _, param := range []struct {
+		name          string
+		value         *int
+		repeatedError error
+		invalidError  error
+	}{
+		{"page", &input.Page, errs.ErrPageRepeated, errs.ErrInvalidPage},
+		{"page_size", &input.PageSize, errs.ErrPageSizeRepeated, errs.ErrInvalidPageSize},
+	} {
+		values, ok := query[param.name]
+		if !ok {
+			continue
+		}
+
+		if len(values) != 1 {
+			return param.repeatedError
+		}
+
+		value, err := strconv.Atoi(values[0])
+		if err != nil {
+			return param.invalidError
+		}
+
+		*param.value = value
+	}
+
+	return nil
 }
 
 func (h *LinkHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +221,9 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, sharederrs.ErrInvalidJSONTime):
 			err = errs.ErrInvalidExpiration
 		}
+
 		h.writeError(w, err)
+
 		return
 	}
 
@@ -232,8 +238,14 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, errs.ErrCodeGenerationExhausted) {
-			err = brickserrs.New(errs.ErrCodeGenerationExhausted.Code, "internal server error", http.StatusInternalServerError, nil)
+			err = brickserrs.New(
+				errs.ErrCodeGenerationExhausted.Code,
+				"internal server error",
+				http.StatusInternalServerError,
+				nil,
+			)
 		}
+
 		h.writeError(w, err)
 
 		return
@@ -259,10 +271,10 @@ func (h *LinkHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LinkHandler) writeError(w http.ResponseWriter, err error) {
-	var codedError *brickserrs.Error
-	if errors.As(err, &codedError) {
+	if codedError, ok := errors.AsType[*brickserrs.Error](err); ok {
 		h.errorHandler.Error(w, codedError)
 		return
 	}
+
 	h.errorHandler.Error(w, err)
 }

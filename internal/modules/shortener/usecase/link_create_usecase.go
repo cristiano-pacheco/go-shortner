@@ -176,13 +176,16 @@ func (uc *LinkCreateUseCase) validateAlias(alias string) error {
 	if len(alias) < 3 || len(alias) > 32 {
 		return errs.ErrAliasLength
 	}
+
 	if alias == "api" || alias == "health" {
 		return errs.ErrAliasReserved
 	}
+
 	for _, c := range alias {
 		if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", c) {
 			return errs.ErrAliasCharacters
 		}
 	}
+
 	return nil
 }

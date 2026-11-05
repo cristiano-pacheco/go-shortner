@@ -6,8 +6,9 @@ import (
 	"strings"
 
 	bricksmigration "github.com/cristiano-pacheco/bricks/pkg/migration"
-	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 	"go.uber.org/fx"
+
+	sharederrs "github.com/cristiano-pacheco/go-shortner/internal/shared/errs"
 )
 
 type Params struct {
