@@ -25,7 +25,7 @@ func newMigrateCommand() *cobra.Command {
 				return err
 			}
 
-			app := fx.New(fx.NopLogger, shortener.Module,
+			app := fx.New(fx.NopLogger, shortener.MigrationModule,
 				bricksconfig.Provide[database.Config]("app.database"),
 				fx.Provide(sharedmigration.NewRunner),
 				fx.Invoke(func(loaded bricksconfig.Config[database.Config], runner *bricksmigration.Runner) error {

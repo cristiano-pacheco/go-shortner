@@ -1,29 +1,47 @@
+x-app: &app
+  build:
+    context: ..
+  cpus: 0.5
+  mem_limit: 32m
+  memswap_limit: 32m
+  stop_grace_period: 35s
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &app-environment
+    GOMEMLIMIT: 24MiB
+    GOMAXPROCS: "1"
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: ${POSTGRES_DB:-shortener}
+    DATABASE_USER: ${POSTGRES_USER:-shortener}
+    DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    DATABASE_SSLMODE: "false"
+    REDIS_URL: redis://redis:6379/0
+    API_KEY: ${API_KEY:-}
+    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8081}
+    HTTP_ADDR: :8080
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   app:
-    build:
-      context: ..
-    stop_grace_period: 35s
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      DATABASE_HOST: postgres
-      DATABASE_PORT: "5432"
-      DATABASE_NAME: ${POSTGRES_DB:-shortener}
-      DATABASE_USER: ${POSTGRES_USER:-shortener}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      DATABASE_SSLMODE: "false"
-      REDIS_URL: redis://redis:6379/0
-      API_KEY: ${API_KEY:-}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
-      HTTP_ADDR: :8080
+    <<: *app
+    command: [management-server]
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
       - "127.0.0.1:${METRICS_PORT:-9090}:9090"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+
+  public:
+    <<: *app
+    cpus: 1.0
+    command: [public-server]
+    environment:
+      <<: *app-environment
+      API_KEY: ""
+    ports:
+      - "127.0.0.1:${PUBLIC_PORT:-8081}:8080"
+      - "127.0.0.1:${PUBLIC_METRICS_PORT:-9093}:9090"

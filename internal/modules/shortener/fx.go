@@ -15,25 +15,44 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 )
 
-// Module owns link management and public resolution as they are implemented.
-var Module = fx.Module("shortener", fx.Provide(
+var persistenceModule = fx.Provide(
 	fx.Annotate(repository.NewLinkRepository, fx.As(new(port.LinkRepository))),
 	fx.Annotate(cache.NewRedirectCache, fx.As(new(port.RedirectCache))),
+)
+
+var publicRoutesModule = fx.Provide(
+	usecase.NewLinkResolveUseCase,
+	handler.NewLinkRedirectHandler,
+	router.NewLinkRedirectRouter,
+	fx.Annotate((*router.LinkRedirectRouter).PublicRoute, fx.ResultTags(`group:"public_routes"`)),
+)
+
+var managementRoutesModule = fx.Provide(
 	fx.Annotate(service.NewCodeGeneratorService, fx.As(new(port.CodeGenerator))),
 	usecase.NewLinkCreateUseCase,
 	usecase.NewLinkDeleteUseCase,
 	usecase.NewLinkGetUseCase,
 	usecase.NewLinkListUseCase,
-	usecase.NewLinkResolveUseCase,
 	usecase.NewLinkUpdateUseCase,
 	fx.Annotate(validator.NewDestinationValidator, fx.As(new(port.DestinationValidator))),
 	handler.NewLinkHandler,
-	handler.NewLinkRedirectHandler,
 	router.NewLinkRouter,
-	router.NewLinkRedirectRouter,
-	fx.Annotate((*router.LinkRedirectRouter).PublicRoute, fx.ResultTags(`group:"public_routes"`)),
 	fx.Annotate((*router.LinkRouter).ManagementRoute, fx.ResultTags(`group:"management_routes"`)),
+)
+
+// PublicModule exposes only public link resolution and its adapters.
+var PublicModule = fx.Module("shortener-public", persistenceModule, publicRoutesModule)
+
+// ManagementModule exposes authenticated link management without public resolution.
+var ManagementModule = fx.Module("shortener-management", persistenceModule, managementRoutesModule)
+
+// MigrationModule publishes this module's owned schema without HTTP components.
+var MigrationModule = fx.Module("shortener-migration", fx.Provide(
 	fx.Annotate(func() bricksmigration.FileSystem {
 		return bricksmigration.New(shortenermigration.Files)
 	}, fx.ResultTags(`group:"migration_filesystems"`)),
 ))
+
+// Module preserves the complete business graph for application-level integration.
+// Server processes select PublicModule or ManagementModule instead.
+var Module = fx.Module("shortener", persistenceModule, publicRoutesModule, managementRoutesModule, MigrationModule)

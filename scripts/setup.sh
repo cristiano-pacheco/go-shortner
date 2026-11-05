@@ -50,7 +50,7 @@ fi
 
 compose up -d --wait postgres redis
 COMPOSE_ENV_FILE="$env_file" make migrate
-compose up -d app
+compose up -d --build app public
 
 port=$(compose port app 8080)
 port=${port##*:}
@@ -60,6 +60,19 @@ until curl --fail --silent --output /dev/null --max-time 2 "$base_url/health"; d
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 60 ]; then
         printf 'Application did not become ready at %s.\n' "$base_url" >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+public_port=$(compose port public 8080)
+public_port=${public_port##*:}
+public_url="http://127.0.0.1:$public_port"
+attempt=0
+until curl --fail --silent --output /dev/null --max-time 2 "$public_url/health"; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 60 ]; then
+        printf 'Public application did not become ready at %s.\n' "$public_url" >&2
         exit 1
     fi
     sleep 1

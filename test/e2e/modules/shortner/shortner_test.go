@@ -81,6 +81,7 @@ type link struct {
 
 type httpSuite struct {
 	base        string
+	publicBase  string
 	metricsBase string
 	client      *http.Client
 	run         func(...string) ([]byte, error)
@@ -122,6 +123,8 @@ func startConfiguredStack(t *testing.T, shared bool, composeOverride string) htt
 		"PUBLIC_BASE_URL="+publicBase,
 		"APP_PORT=0",
 		"METRICS_PORT=0",
+		"PUBLIC_PORT=0",
+		"PUBLIC_METRICS_PORT=0",
 		"POSTGRES_PORT=0",
 		"REDIS_PORT=0",
 	)
@@ -174,7 +177,7 @@ func startConfiguredStack(t *testing.T, shared bool, composeOverride string) htt
 		})
 	}
 
-	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "--build-arg", "E2E_BUILD_ID=" + e2eBuildID, "app"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app"}} {
+	for _, step := range [][]string{{"up", "-d", "--wait", "postgres", "redis"}, {"build", "--build-arg", "E2E_BUILD_ID=" + e2eBuildID, "app", "public"}, {"run", "--rm", "--no-deps", "app", "migrate"}, {"up", "-d", "--no-deps", "app", "public"}} {
 		if step[0] == "build" {
 			e2eBuildAttempted = true
 		}
@@ -191,6 +194,7 @@ func startConfiguredStack(t *testing.T, shared bool, composeOverride string) htt
 		run: run,
 	}
 	s.base = s.composeAddress(t, "8080")
+	s.publicBase = s.composeServiceAddress(t, "public", "8080")
 	s.metricsBase = s.composeAddress(t, "9090")
 
 	s.waitReady(t)
@@ -201,28 +205,40 @@ func startConfiguredStack(t *testing.T, shared bool, composeOverride string) htt
 func (s httpSuite) waitReady(t *testing.T) {
 	t.Helper()
 
-	deadline := time.Now().Add(45 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := s.client.Get(s.base + "/health")
-		if err == nil {
-			resp.Body.Close()
+	for _, base := range []string{s.base, s.publicBase} {
+		deadline := time.Now().Add(45 * time.Second)
+		ready := false
+		for time.Now().Before(deadline) {
+			resp, err := s.client.Get(base + "/health")
+			if err == nil {
+				resp.Body.Close()
 
-			if resp.StatusCode == http.StatusOK {
-				return
+				if resp.StatusCode == http.StatusOK {
+					ready = true
+					break
+				}
 			}
+
+			time.Sleep(200 * time.Millisecond)
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		if !ready {
+			logs, _ := s.run("logs", "app", "public")
+			t.Fatalf("application did not become healthy at %s:\n%s", base, logs)
+		}
 	}
-
-	logs, _ := s.run("logs", "app")
-	t.Fatalf("application did not become healthy:\n%s", logs)
 }
 
 func (s httpSuite) composeAddress(t *testing.T, port string) string {
 	t.Helper()
 
-	out, err := s.run("port", "app", port)
+	return s.composeServiceAddress(t, "app", port)
+}
+
+func (s httpSuite) composeServiceAddress(t *testing.T, service, port string) string {
+	t.Helper()
+
+	out, err := s.run("port", service, port)
 	if err != nil {
 		t.Fatalf("compose port %s: %v\n%s", port, err, out)
 	}
@@ -233,7 +249,18 @@ func (s httpSuite) composeAddress(t *testing.T, port string) string {
 func (s httpSuite) request(t *testing.T, method, path, body, key, contentType string) (int, http.Header, []byte) {
 	t.Helper()
 
-	req, err := http.NewRequest(method, s.base+path, strings.NewReader(body))
+	base := s.base
+	if !strings.HasPrefix(path, "/api/") && path != "/health" {
+		base = s.publicBase
+	}
+
+	return s.requestAt(t, base, method, path, body, key, contentType)
+}
+
+func (s httpSuite) requestAt(t *testing.T, base, method, path, body, key, contentType string) (int, http.Header, []byte) {
+	t.Helper()
+
+	req, err := http.NewRequest(method, base+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}

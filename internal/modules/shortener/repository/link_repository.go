@@ -95,7 +95,10 @@ func (r *LinkRepository) List(ctx context.Context, limit, offset int) ([]model.L
 
 	var total int64
 
-	resultErr = db.Count(&total).Error
+	// Transactional buckets keep the exact total independent of the link volume.
+	// HAVING makes a missing bucket fail instead of silently undercounting.
+	resultErr = r.database.WithContext(ctx).
+		Raw("SELECT SUM(total)::bigint FROM link_counts HAVING COUNT(*) = 64").Row().Scan(&total)
 	if resultErr != nil {
 		return nil, 0, resultErr
 	}

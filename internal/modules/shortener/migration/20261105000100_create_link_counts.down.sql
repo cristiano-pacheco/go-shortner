@@ -1,0 +1,13 @@
+BEGIN;
+LOCK TABLE links IN SHARE ROW EXCLUSIVE MODE;
+DROP TRIGGER links_count_insert ON links;
+DROP TRIGGER links_count_delete ON links;
+DROP TRIGGER links_count_update ON links;
+DROP TRIGGER links_count_truncate ON links;
+DROP FUNCTION count_inserted_links();
+DROP FUNCTION count_deleted_links();
+DROP FUNCTION count_updated_links();
+DROP FUNCTION reset_link_counts();
+DROP FUNCTION apply_link_count_delta(SMALLINT, BIGINT);
+DROP TABLE link_counts;
+COMMIT;

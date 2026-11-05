@@ -5,7 +5,8 @@ x-app: &app
   build:
     context: ..
   cpus: 0.5
-  mem_limit: 128m
+  mem_limit: 32m
+  memswap_limit: 32m
   stop_grace_period: 35s
   volumes:
     - ./load/load.yaml:/app/config/load.yaml:ro
@@ -14,6 +15,8 @@ x-app: &app
   security_opt: [no-new-privileges:true]
   environment: &app-environment
     APP_ENV: load
+    GOMEMLIMIT: 24MiB
+    GOMAXPROCS: "1"
     DATABASE_HOST: postgres
     DATABASE_PORT: "5432"
     DATABASE_NAME: shortner_load
@@ -63,20 +66,31 @@ services:
       postgres:
         condition: service_healthy
 
-  app1:
+  management:
     <<: *app
-  app2:
+    cpus: ${LOAD_MANAGEMENT_CPUS:-0.5}
+    command: [management-server]
+  public:
     <<: *app
+    cpus: ${LOAD_PUBLIC_CPUS:-1.0}
+    command: [public-server]
+    environment:
+      <<: *app-environment
+      API_KEY: ""
 
   proxy:
     image: nginx:1.27-alpine
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
     ports:
       - "127.0.0.1:${LOAD_PORT:-8088}:8080"
     volumes:
       - ./load/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - app1
-      - app2
+      - management
+      - public
 
   prometheus:
     image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
@@ -111,9 +125,15 @@ services:
       - ${LOAD_RESULTS_DIR:-../reports/load}:/results
     environment:
       BASE_URL: http://proxy:8080
+      PUBLIC_HEALTH_URL: http://public:8080/health
       API_KEY: load-test-only
       VUS: ${LOAD_VUS:-10}
       DURATION: ${LOAD_DURATION:-2m}
+      WORKLOAD: ${LOAD_WORKLOAD:-mixed}
+      HOT_SET: ${LOAD_HOT_SET:-1000}
+      RATE: ${LOAD_RATE:-0}
+      WARMUP_REQUESTS: ${LOAD_WARMUP_REQUESTS:-0}
+      MAX_VUS: ${LOAD_MAX_VUS:-200}
       K6_OUT: experimental-prometheus-rw
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
       K6_PROMETHEUS_RW_PUSH_INTERVAL: 2s

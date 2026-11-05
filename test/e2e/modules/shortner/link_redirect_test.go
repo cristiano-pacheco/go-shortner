@@ -47,6 +47,31 @@ func (s *RedirectLinkSuite) redis(args ...string) string {
 	return fmt.Sprint(value)
 }
 
+func (s *RedirectLinkSuite) TestProcessesExposeOnlyOwnedRoutes() {
+	s.create("separate-processes")
+
+	for _, base := range []string{s.http.base, s.http.publicBase} {
+		status, _, _ := s.http.requestAt(s.T(), base, http.MethodGet, "/health", "", "", "")
+		s.Equal(http.StatusOK, status)
+	}
+
+	status, headers, _ := s.http.requestAt(
+		s.T(), s.http.base, http.MethodGet, "/separate-processes", "", "", "",
+	)
+	s.Equal(http.StatusNotFound, status)
+	s.Empty(headers.Get("Location"))
+
+	for _, key := range []string{"", apiKey} {
+		status, _, _ = s.http.requestAt(
+			s.T(), s.http.publicBase, http.MethodGet, "/api/v1/links", "", key, "",
+		)
+		s.Equal(http.StatusNotFound, status)
+	}
+
+	s.http.expect(s.T(), http.MethodGet, "/api/v1/links", "", "", "", http.StatusUnauthorized)
+	s.http.expect(s.T(), http.MethodGet, "/separate-processes", "", "", "", http.StatusFound)
+}
+
 func (s *RedirectLinkSuite) TestGetRedirectPreservesDestination() {
 	s.sql(`INSERT INTO links (code, destination) VALUES ('FixtureCase', 'https://example.com/a?x=1&y=two')`)
 	headers, _ := s.http.expect(s.T(), http.MethodGet, "/FixtureCase", "", "", "", http.StatusFound)
@@ -195,7 +220,7 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 
 	headers, _ := s.http.expect(s.T(), http.MethodGet, "/dependency-fallback", "", "", "", http.StatusFound)
 	s.Equal("https://example.com/path", headers.Get("Location"))
-	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
+	out, err = s.http.run("run", "--rm", "--no-deps", "public", "public-server")
 	s.Require().Error(err, "server should reject unavailable Redis: %s", out)
 	s.Contains(string(out), "connection failed to redis://")
 	out, err = s.http.run("up", "-d", "--wait", "redis")
@@ -207,16 +232,18 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 		_, _ = s.http.run("up", "-d", "--wait", "postgres")
 	}()
 
-	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
+	out, err = s.http.run("run", "--rm", "--no-deps", "public", "public-server")
 	s.Require().Error(err, "server should reject unavailable PostgreSQL: %s", out)
 	s.Contains(string(out), "failed to connect to database")
 	out, err = s.http.run("up", "-d", "--wait", "postgres")
 	s.Require().NoError(err, "%s", out)
-	out, err = s.http.run("restart", "app")
+	out, err = s.http.run("restart", "app", "public")
 	s.Require().NoError(err, "%s", out)
 	out, err = s.http.run("port", "app", "8080")
 	s.Require().NoError(err, "%s", out)
 	s.http.base = "http://" + strings.TrimSpace(string(out))
+	s.http.publicBase = s.http.composeServiceAddress(s.T(), "public", "8080")
+	s.http.waitReady(s.T())
 
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
