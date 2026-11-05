@@ -1,17 +1,41 @@
 {
   "date": "2026-11-05",
-  "host": "Apple M2 Max; Colima Linux aarch64 VM, 4 vCPUs, 8307826688 bytes RAM",
   "baseline_revision": "d0f86c0050cf8dc20ad8dba390a8b114c60e79e5",
   "visible_links": 1000000,
+  "pool30_concurrency": [
+    {"vus": 50, "duration_seconds": 30, "requests_per_second": 5260.801051084787, "p95_ms": 34.36293535, "list_p95_ms": 35.341913799999986, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 100, "duration_seconds": 30, "requests_per_second": 5830.931008667968, "p95_ms": 57.9880802, "list_p95_ms": 66.74025989999998, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 200, "duration_seconds": 30, "requests_per_second": 1895.8498891434097, "p95_ms": 319.27588999999983, "list_p95_ms": 488.175551, "http_error_rate": 0, "all_thresholds_passed": true},
+    {"vus": 10, "duration_seconds": 120, "requests_per_second": 6853.832838709103, "p95_ms": 2.33502755, "list_p95_ms": 2.1759456499999996, "http_error_rate": 0, "all_thresholds_passed": true}
+  ],
   "notes": [
-    "Metrics enabled; tracing disabled. Generator and dependencies share VM.",
+    "Metrics enabled; tracing disabled. All services run in Docker Compose.",
     "Go hard memory caps: baseline 256 MiB combined, optimized 64 MiB combined.",
     "CPU caps: baseline/equal-cpu 1 combined; final defaults 1.5 combined.",
     "Redirect working set: 1000 seeded codes. Rates exclude readiness/warmup."
   ],
   "cases": {
+    "pool-10-open-5-idle": {
+      "configuration": {"workload": "mixed", "vus": 10, "duration": "2m", "pool_open": 10, "pool_idle": 5},
+      "workload_requests": 474761,
+      "measured_seconds": 120.01276259699999,
+      "business_requests_per_second": 3955.920934794545,
+      "p95_ms": 9.860891,
+      "list_p95_ms": 10.065194999999997,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true
+    },
+    "pool-30-open-10-idle": {
+      "configuration": {"workload": "mixed", "vus": 10, "duration": "2m", "pool_open": 30, "pool_idle": 10},
+      "workload_requests": 849709,
+      "measured_seconds": 120.008267111,
+      "business_requests_per_second": 7080.420544811912,
+      "p95_ms": 2.2784821999999982,
+      "list_p95_ms": 2.0326926999999997,
+      "failed_request_rate": 0,
+      "all_thresholds_passed": true
+    },
     "baseline-mixed": {
-      "report": "reports/load/baseline-mixed",
       "configuration": {
         "workload": "mixed",
         "vus": 50,
@@ -27,7 +51,6 @@
       "list_p95_ms": 898.3558730499999
     },
     "baseline-redirect": {
-      "report": "reports/load/baseline-redirect",
       "configuration": {
         "workload": "redirect",
         "vus": 50,
@@ -42,7 +65,6 @@
       "all_thresholds_passed": true
     },
     "equal-cpu-mixed": {
-      "report": "reports/load/run-PxViMs9s",
       "configuration": {
         "rate": 0,
         "maxVUs": 200,
@@ -103,7 +125,6 @@
       ]
     },
     "final-mixed": {
-      "report": "reports/load/run-dhwC6SH2",
       "configuration": {
         "workload": "mixed",
         "vus": 50,
@@ -164,7 +185,6 @@
       ]
     },
     "final-redirect": {
-      "report": "reports/load/run-cSNcE5xm",
       "configuration": {
         "maxVUs": 200,
         "hotSet": 1000,
@@ -224,7 +244,6 @@
       ]
     },
     "final-list": {
-      "report": "reports/load/run-eJSZk0g8",
       "configuration": {
         "maxVUs": 200,
         "hotSet": 1000,
@@ -285,7 +304,6 @@
       ]
     },
     "rejected-offered-20k": {
-      "report": "reports/load/run-15qxtO8M",
       "configuration": {
         "maxVUs": 200,
         "hotSet": 1000,
@@ -346,7 +364,6 @@
       ]
     },
     "rejected-offered-10k": {
-      "report": "reports/load/run-kjstQ4Ce",
       "configuration": {
         "workload": "redirect",
         "vus": 200,
@@ -363,7 +380,6 @@
       "all_thresholds_passed": false
     },
     "rejected-warm-offered-10k": {
-      "report": "reports/load/run-WTKj5g8b",
       "configuration": {
         "hotSet": 1000,
         "workload": "redirect",
@@ -381,7 +397,6 @@
       "all_thresholds_passed": false
     },
     "rejected-500vu-offered-10k": {
-      "report": "reports/load/run-pMB90uVf",
       "configuration": {
         "workload": "redirect",
         "vus": 500,

@@ -23,8 +23,8 @@ app:
     user: "env://DATABASE_USER"
     password: "env://DATABASE_PASSWORD"
     sslmode: "env://DATABASE_SSLMODE"
-    maxopenconnections: 10
-    maxidleconnections: 5
+    maxopenconnections: 30
+    maxidleconnections: 10
     connecttimeout: 3
     statementtimeout: 5000
     timezone: UTC

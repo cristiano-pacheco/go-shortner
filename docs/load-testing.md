@@ -6,7 +6,7 @@ Requires Docker, Docker Compose, curl and tar. Run from the repository root.
 LOAD_OPEN_BROWSER=0 LOAD_VUS=50 LOAD_DURATION=60s make test-load
 ```
 
-The command builds the image, starts the stack, runs migrations, seeds one million links and runs k6. Reports go to `reports/load/run-*/`. Failed gates return a nonzero exit code. The stack stays running.
+The command builds the image, starts the stack, runs migrations, seeds one million links and runs k6. Failed gates return a nonzero exit code. The stack stays running.
 
 ## Workloads
 
@@ -49,18 +49,7 @@ Data persists. Mixed iterations leave soft-deleted rows. Failed iterations may l
 
 Readiness and warmup requests do not count toward workload gates. Global HTTP totals include them. Business throughput uses `passes + fails` from `http_req_failed{phase:workload}`, divided by `state.testRunDurationMs / 1000`.
 
-## Reports
-
-| Files | Contents |
-| --- | --- |
-| `summary.json`, `index.html` | Rates, latency, checks and gates |
-| `k6.log`, `services.log` | Generator output and service logs |
-| `environment.txt`, `compose.yaml`, `dataset.txt` | Host, limits and row counts |
-| `source.tar.gz`, `containers.txt` | Source inputs, image IDs, OOM and restart state |
-| `resources.txt`, `prometheus.txt` | Sampled CPU, memory and application metrics |
-| `counts.txt` | Exact-count reconciliation. A mismatch fails the run. |
-
-Resource samples are not continuous peaks. The generator shares the host and may limit throughput.
+CPU and memory samples are not continuous peaks. The generator may limit throughput. Each run checks OOM state, restarts and exact-count consistency.
 
 ## Dashboards
 
@@ -90,7 +79,7 @@ Remove the stack and its database volume:
 docker compose -p shortner-load -f docker/docker-compose.load.yaml down -v --remove-orphans
 ```
 
-Reports remain. Only one load script can run per Docker daemon. After a forced termination, confirm no test is running before removing a stale lock:
+Only one load script can run per Docker daemon. After a forced termination, confirm no test is running before removing a stale lock:
 
 ```sh
 docker network rm shortner-load-run-lock

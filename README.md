@@ -20,14 +20,9 @@ Setup creates credentials, runs migrations and seeds example links. Grafana uses
 
 ## Performance
 
-With one million links, 50 virtual users and 60-second closed-loop tests:
+The mixed workload reached 7,080 requests/s with 2.28 ms p95 and zero HTTP errors. A repeat reached 6,854 requests/s. Both used one million links, 10 virtual users and 2 minutes of closed-loop load. The PostgreSQL pool allows 30 open and 10 idle connections.
 
-| Workload | Requests/s |
-| --- | ---: |
-| Mixed | 6,832 |
-| Redirects | 27,179 |
-
-Both runs had zero HTTP errors. The two Go servers have a combined 64 MiB memory limit. Dependencies use additional resources. CPU limits and failed offered-rate tests are in [performance results](docs/performance.md). Sustained arrival-rate capacity remains unverified.
+The two Go servers have a combined 64 MiB memory limit. Dependencies use additional resources. See [results and Compose limits](docs/performance.md). Sustained arrival-rate capacity remains unverified.
 
 ## Documentation
 

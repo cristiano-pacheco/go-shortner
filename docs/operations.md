@@ -61,8 +61,6 @@ The application declares Bricks `trace.Module` in `cmd/server.go`. Bricks initia
 
 Bricks supports independent `app.database.tracing.enabled` and `app.redis.tracing.enabled` switches, both disabled by default. Consumers must also declare the corresponding Bricks instrumentation modules. This application does not currently declare those modules or enable the switches. It creates use-case, repository and cache spans and extracts incoming W3C trace context, but does not create HTTP server spans. Plugin controls can disable SQL and Redis statement capture, but third-party exception or status messages can still contain sensitive details. Do not assume all traces are sanitized.
 
-For contributor work, the local Bricks repository is `/Users/cp/code/lab/go/bricks` and go-otel is `/Users/cp/code/lab/go/go-otel`. `/Users/cp/code/projects/jbn` is an architecture reference, not a dependency or a source of this application's runtime defaults.
-
 ## Run on the host
 
 Set `DATABASE_PASSWORD` in `.env`, then start the dependencies, apply migrations and run the server:

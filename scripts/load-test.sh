@@ -102,7 +102,6 @@ printf 'Results: %s\n' "$LOAD_RESULTS_DIR"
   printf 'workload=%s vus=%s duration=%s seed_target=%s hot_set=%s rate=%s max_vus=%s warmup_requests=%s\n' \
     "${LOAD_WORKLOAD:-mixed}" "${LOAD_VUS:-10}" "${LOAD_DURATION:-2m}" "$LOAD_SEED_COUNT" "${LOAD_HOT_SET:-1000}" "${LOAD_RATE:-0}" "${LOAD_MAX_VUS:-200}" "${LOAD_WARMUP_REQUESTS:-0}"
   docker version --format 'Docker server: {{.Server.Version}}'
-  docker info --format 'Host: {{.OSType}}/{{.Architecture}} CPUs={{.NCPU}} Memory={{.MemTotal}} Kernel={{.KernelVersion}}'
   git rev-parse HEAD
   git status --short
 } > "$LOAD_RESULTS_DIR/environment.txt"

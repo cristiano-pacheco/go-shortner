@@ -43,4 +43,4 @@ These describe the current checkout. Recheck the referenced files when working o
 
 - **Mocks:** no mockery configuration is present in the repository. Check generation configuration before using `update-mocks`.
 
-`make test-load` starts the isolated load stack, opens its Grafana dashboard and runs k6; it writes per-run reports under `reports/load/`. It requires Docker, Compose, curl, image/build access and an available graphical browser unless `LOAD_OPEN_BROWSER=0`. It leaves the stack and its database running; see [load testing](../load-testing.md) for cleanup and ports.
+`make test-load` starts the isolated load stack, opens Grafana and runs k6. It requires Docker, Compose, curl, image/build access and an available graphical browser unless `LOAD_OPEN_BROWSER=0`. It leaves the stack and its database running; see [load testing](../load-testing.md) for cleanup and ports.

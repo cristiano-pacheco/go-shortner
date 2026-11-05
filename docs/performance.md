@@ -2,7 +2,33 @@
 
 Measured on 2026-11-05. One million visible links. Metrics enabled, tracing disabled.
 
-## Results
+## Pool tuning
+
+Mixed workload, 10 virtual users, 2 minutes, one million visible links. Only the PostgreSQL connection-pool settings changed. Both runs passed all gates with zero HTTP errors.
+
+| Pool, open / idle | Requests/s | HTTP p95 | List p95 |
+| --- | ---: | ---: | ---: |
+| 10 / 5 | 3,956 | 9.86 ms | 10.07 ms |
+| 30 / 10 | 7,080 | 2.28 ms | 2.03 ms |
+
+Throughput improved 1.79×. Both runs retained exactly one million visible links. Physical row counts differ because soft-deleted rows accumulate.
+
+## Higher concurrency
+
+The 30-open, 10-idle pool was tested with unchanged Compose limits.
+
+| Virtual users | Duration | Requests/s | HTTP p95 | List p95 |
+| --- | --- | ---: | ---: | ---: |
+| 50 | 30 seconds | 5,261 | 34.36 ms | 35.34 ms |
+| 100 | 30 seconds | 5,831 | 57.99 ms | 66.74 ms |
+| 200 | 30 seconds | 1,896 | 319.28 ms | 488.18 ms |
+| 10, repeat | 2 minutes | 6,854 | 2.34 ms | 2.18 ms |
+
+All runs passed with zero HTTP errors, OOM kills or restarts. Counts remained exact. Management reached its 0.5-CPU cap. More concurrency increased latency without improving throughput. These short trials do not establish a maximum sustained rate.
+
+## Earlier results
+
+These tests used the previous 10-open, 5-idle pool. Redirects have not been retested with the larger pool.
 
 Closed-loop k6 tests used 50 virtual users for 60 seconds. Rates exclude readiness requests. Mixed iterations create, get, list, update, redirect with GET and HEAD, then soft-delete a link. Lists fetch page 1 with 20 items and an exact total.
 
@@ -31,7 +57,7 @@ The original mixed test failed the 500 ms latency gate. All optimized tests abov
 
 The 64 MiB limit covers only the two Go servers. PostgreSQL, Redis, Nginx, k6 and monitoring are additional. Memory limits are not measured RSS reductions. Neither server was OOM-killed or restarted.
 
-Apple M2 Max host. Colima VM with 4 vCPUs and 8,307,826,688 bytes RAM. Linux aarch64, kernel `6.8.0-100-generic`, Docker 29.2.1. Go 1.27.3, PostgreSQL 17.5, Redis 7, Nginx 1.27, k6 0.57.0. The generator shares the VM. Dependencies have no resource caps.
+Compose runs PostgreSQL 17.5, Redis 7, Nginx 1.27 and k6 0.57.0. Dependencies and the generator have no CPU or memory limits.
 
 ## Changes
 
@@ -63,12 +89,10 @@ LOAD_OPEN_BROWSER=0 LOAD_PUBLIC_CPUS=0.5 LOAD_VUS=50 LOAD_DURATION=60s make test
 LOAD_OPEN_BROWSER=0 LOAD_WORKLOAD=redirect LOAD_VUS=50 LOAD_DURATION=60s make test-load
 ```
 
-[Measurement snapshot](benchmarks/2026-11-05.json) contains results and report paths. Raw reports remain in `reports/load/`. Baseline revision is `d0f86c0050cf8dc20ad8dba390a8b114c60e79e5`. Optimized reports archive uncommitted source inputs and image IDs. See [load testing](load-testing.md) for report fields.
-
 After concurrent mixed load, maintained and independently counted totals both equaled 1,000,000. Build, default tests, E2E, integration with race detection, migration checks, lint, vulnerability scanning and nil-safety analysis passed.
 
 ## Limits
 
 Redirect tests alternate GET and HEAD over 1,000 mostly cached codes. Nginx does not cache responses. Listing tests cover only page 1. Deep offsets still require proportional scanning. Soft-deleted rows accumulate between runs.
 
-These are single local trials, not cold-cache, TLS or long-running production tests. Generator contention and tracing can change results. Measure from a separate host before setting production capacity.
+These are single Compose trials, not cold-cache, TLS or long-running production tests. Generator contention and tracing can change results.
