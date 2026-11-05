@@ -2,48 +2,69 @@ package httpserver
 
 import (
 	"context"
-	"errors"
-	"net"
 	"net/http"
 	"sync"
-	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/cristiano-pacheco/bricks/pkg/http/server/chi"
+	chiv5 "github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/fx"
-
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
 )
 
-const (
-	maxRequestBodyBytes = 1 << 20
-	readHeaderTimeout   = 5 * time.Second
-	readTimeout         = 15 * time.Second
-	writeTimeout        = 15 * time.Second
-	idleTimeout         = 60 * time.Second
-	drainTimeout        = 20 * time.Second
-)
+const maxRequestBodyBytes = 1 << 20
 
 // ManagementRoute registers paths relative to /api/v1.
-type ManagementRoute func(chi.Router)
+type ManagementRoute func(chiv5.Router)
 
 // PublicRoute registers public paths relative to the root router.
-type PublicRoute func(chi.Router)
+type PublicRoute func(chiv5.Router)
 
 type serverParams struct {
 	fx.In
 
 	Lifecycle        fx.Lifecycle
-	Shutdown         fx.Shutdowner
-	Config           config.Config
 	Authentication   *APIKeyMiddleware
 	Metrics          *MetricsMiddleware
 	ManagementRoutes []ManagementRoute `group:"management_routes"`
 	PublicRoutes     []PublicRoute     `group:"public_routes"`
 }
 
-func newRouter(params serverParams) chi.Router {
-	router := chi.NewRouter()
+type applicationRoutes struct {
+	params         serverParams
+	mu             sync.Mutex
+	activeRequests int
+	stopping       bool
+	drained        chan struct{}
+}
+
+var _ chi.Route = (*applicationRoutes)(nil)
+
+func newApplicationRoutes(params serverParams) *applicationRoutes {
+	routes := &applicationRoutes{params: params, drained: make(chan struct{})}
+	// This hook is registered before the Bricks server hook, so Fx stops the
+	// listener first and waits for remaining handlers before stopping resources.
+	params.Lifecycle.Append(fx.Hook{OnStop: func(ctx context.Context) error {
+		routes.mu.Lock()
+
+		routes.stopping = true
+		if routes.activeRequests == 0 {
+			close(routes.drained)
+		}
+		routes.mu.Unlock()
+
+		select {
+		case <-routes.drained:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}})
+
+	return routes
+}
+
+func (routes *applicationRoutes) Setup(server *chi.Server) {
+	router := chiv5.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
@@ -55,103 +76,48 @@ func newRouter(params serverParams) chi.Router {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	router.Route("/api/v1", func(r chi.Router) {
-		r.Use(params.Authentication.Authenticate)
+	router.Route("/api/v1", func(r chiv5.Router) {
+		r.Use(routes.params.Authentication.Authenticate)
 
-		for _, register := range params.ManagementRoutes {
+		for _, register := range routes.params.ManagementRoutes {
 			register(r)
 		}
 	})
-	router.Group(func(r chi.Router) {
-		for _, register := range params.PublicRoutes {
+	router.Group(func(r chiv5.Router) {
+		for _, register := range routes.params.PublicRoutes {
 			register(r)
 		}
 	})
 
-	return router
-}
+	handler := routes.params.Metrics.Wrap(router)
 
-func startServer(ctx context.Context, server *http.Server, params serverParams) error {
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", params.Config.HTTPAddr)
-	if err != nil {
-		return err
-	}
+	guarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		routes.mu.Lock()
+		if routes.stopping {
+			routes.mu.Unlock()
+			w.WriteHeader(http.StatusServiceUnavailable)
 
-	go func() {
-		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			_ = params.Shutdown.Shutdown(fx.ExitCode(1))
+			return
 		}
-	}()
 
-	return nil
-}
+		routes.activeRequests++
+		routes.mu.Unlock()
 
-func Register(params serverParams) {
-	var mutex sync.Mutex
+		defer func() {
+			routes.mu.Lock()
 
-	activeRequests := 0
-	stopping := false
-	drained := make(chan struct{})
-
-	handler := params.Metrics.Wrap(newRouter(params))
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mutex.Lock()
-			if stopping {
-				mutex.Unlock()
-				w.WriteHeader(http.StatusServiceUnavailable)
-
-				return
+			routes.activeRequests--
+			if routes.stopping && routes.activeRequests == 0 {
+				close(routes.drained)
 			}
+			routes.mu.Unlock()
+		}()
 
-			activeRequests++
-			mutex.Unlock()
-
-			defer func() {
-				mutex.Lock()
-
-				activeRequests--
-				if stopping && activeRequests == 0 {
-					close(drained)
-				}
-				mutex.Unlock()
-			}()
-
-			handler.ServeHTTP(w, r)
-		}),
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
-	}
-
-	params.Lifecycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			return startServer(ctx, server, params)
-		},
-		OnStop: func(ctx context.Context) error {
-			mutex.Lock()
-			stopping = true
-
-			if activeRequests == 0 {
-				close(drained)
-			}
-			mutex.Unlock()
-
-			drainCtx, cancel := context.WithTimeout(ctx, drainTimeout)
-			defer cancel()
-
-			err := server.Shutdown(drainCtx)
-			if err != nil {
-				err = errors.Join(err, server.Close())
-			}
-
-			select {
-			case <-drained:
-				return err
-			case <-ctx.Done():
-				return errors.Join(err, ctx.Err())
-			}
-		},
+		handler.ServeHTTP(w, r)
 	})
+
+	server.Router().Mount("/", guarded)
+	// Bricks registers /healthz before application routes. Keep it available
+	// as a short code instead of shadowing previously created links.
+	server.Router().Get("/healthz", guarded.ServeHTTP)
 }

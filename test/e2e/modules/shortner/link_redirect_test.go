@@ -54,6 +54,12 @@ func (s *RedirectLinkSuite) TestGetRedirectPreservesDestination() {
 	s.Equal("no-store", headers.Get("Cache-Control"))
 }
 
+func (s *RedirectLinkSuite) TestHealthzRemainsAnAvailableCode() {
+	s.sql(`INSERT INTO links (code, destination) VALUES ('healthz', 'https://example.com/healthz')`)
+	headers, _ := s.http.expect(s.T(), http.MethodGet, "/healthz", "", "", "", http.StatusFound)
+	s.Equal("https://example.com/healthz", headers.Get("Location"))
+}
+
 func (s *RedirectLinkSuite) TestHeadRedirectHasNoBody() {
 	s.sql(`INSERT INTO links (code, destination) VALUES ('head-link', 'https://example.com/head')`)
 	headers, body := s.http.expect(s.T(), http.MethodHead, "/head-link", "", "", "", http.StatusFound)
@@ -191,7 +197,7 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 	s.Equal("https://example.com/path", headers.Get("Location"))
 	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
 	s.Require().Error(err, "server should reject unavailable Redis: %s", out)
-	s.Contains(string(out), "cannot connect to Redis")
+	s.Contains(string(out), "connection failed to redis://")
 	out, err = s.http.run("up", "-d", "--wait", "redis")
 	s.Require().NoError(err, "%s", out)
 	out, err = s.http.run("stop", "postgres")
@@ -203,7 +209,7 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 
 	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
 	s.Require().Error(err, "server should reject unavailable PostgreSQL: %s", out)
-	s.Contains(string(out), "cannot connect to PostgreSQL")
+	s.Contains(string(out), "failed to connect to database")
 	out, err = s.http.run("up", "-d", "--wait", "postgres")
 	s.Require().NoError(err, "%s", out)
 	out, err = s.http.run("restart", "app")

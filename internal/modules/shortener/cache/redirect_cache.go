@@ -7,26 +7,26 @@ import (
 	"time"
 
 	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/redis"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
-	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 const redirectCachePrefix = "shortener:redirect:v1:"
 const redirectCacheTimeout = time.Second
 
 type RedirectCache struct {
-	redisClient        *sharedredis.Client
+	redisClient        *redis.Client
 	applicationMetrics *metrics.Metrics
 }
 
 var _ port.RedirectCache = (*RedirectCache)(nil)
 
-func NewRedirectCache(redisClient *sharedredis.Client, applicationMetrics *metrics.Metrics) *RedirectCache {
+func NewRedirectCache(redisClient *redis.Client, applicationMetrics *metrics.Metrics) *RedirectCache {
 	return &RedirectCache{redisClient: redisClient, applicationMetrics: applicationMetrics}
 }
 
@@ -38,10 +38,10 @@ func (c *RedirectCache) Get(ctx context.Context, code string) (port.RedirectSnap
 	defer cancel()
 
 	startedAt := time.Now()
-	data, err := c.redisClient.Get(ctx, redirectCachePrefix+code).Bytes()
+	data, err := c.redisClient.UniversalClient().Get(ctx, redirectCachePrefix+code).Bytes()
 
 	result := metrics.CacheResultSuccess
-	if errors.Is(err, redis.Nil) {
+	if errors.Is(err, goredis.Nil) {
 		result = "miss"
 	} else if err != nil {
 		result = metrics.CacheResultError
@@ -49,7 +49,7 @@ func (c *RedirectCache) Get(ctx context.Context, code string) (port.RedirectSnap
 
 	c.applicationMetrics.ObserveCacheOperation("get", result, startedAt)
 
-	if errors.Is(err, redis.Nil) {
+	if errors.Is(err, goredis.Nil) {
 		return port.RedirectSnapshot{}, false, nil
 	}
 
@@ -87,7 +87,9 @@ func (c *RedirectCache) Set(ctx context.Context, code string, snapshot port.Redi
 	defer cancel()
 
 	startedAt := time.Now()
-	err = c.redisClient.SetArgs(ctx, redirectCachePrefix+code, data, redis.SetArgs{ExpireAt: deadline}).Err()
+	err = c.redisClient.UniversalClient().SetArgs(
+		ctx, redirectCachePrefix+code, data, goredis.SetArgs{ExpireAt: deadline},
+	).Err()
 
 	result := metrics.CacheResultSuccess
 	if err != nil {
@@ -107,7 +109,7 @@ func (c *RedirectCache) Delete(ctx context.Context, code string) error {
 	defer cancel()
 
 	startedAt := time.Now()
-	err := c.redisClient.Del(ctx, redirectCachePrefix+code).Err()
+	err := c.redisClient.UniversalClient().Del(ctx, redirectCachePrefix+code).Err()
 
 	result := metrics.CacheResultSuccess
 	if err != nil {

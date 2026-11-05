@@ -10,8 +10,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"go.uber.org/fx"
 
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
+	"github.com/cristiano-pacheco/bricks/pkg/redis"
+	"gorm.io/gorm"
 )
 
 const (
@@ -448,7 +448,7 @@ func (m *Metrics) errorCategory(category string) string {
 func RegisterPoolMetrics(
 	lifecycle fx.Lifecycle,
 	registerer prometheus.Registerer,
-	database *database.Database,
+	database *gorm.DB,
 	redisClient *redis.Client,
 ) {
 	var registered []prometheus.Collector
@@ -463,7 +463,7 @@ func RegisterPoolMetrics(
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			sqlDB, err := database.DB.DB()
+			sqlDB, err := database.DB()
 			if err != nil {
 				return fmt.Errorf("get PostgreSQL pool for metrics: %w", err)
 			}
@@ -476,7 +476,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool total connections.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().TotalConns)
+						return float64(redisClient.UniversalClient().PoolStats().TotalConns)
 					},
 				),
 				prometheus.NewGaugeFunc(
@@ -485,7 +485,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool idle connections.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().IdleConns)
+						return float64(redisClient.UniversalClient().PoolStats().IdleConns)
 					},
 				),
 				prometheus.NewGaugeFunc(
@@ -494,7 +494,7 @@ func RegisterPoolMetrics(
 						Help: "Requests waiting for a Redis pool connection.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().PendingRequests)
+						return float64(redisClient.UniversalClient().PoolStats().PendingRequests)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -503,7 +503,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool acquisitions that found a free connection, not redirect cache hits.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().Hits)
+						return float64(redisClient.UniversalClient().PoolStats().Hits)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -512,7 +512,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool acquisitions that did not find a free connection.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().Misses)
+						return float64(redisClient.UniversalClient().PoolStats().Misses)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -521,7 +521,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool connection wait timeouts.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().Timeouts)
+						return float64(redisClient.UniversalClient().PoolStats().Timeouts)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -530,7 +530,7 @@ func RegisterPoolMetrics(
 						Help: "Redis pool connection waits.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().WaitCount)
+						return float64(redisClient.UniversalClient().PoolStats().WaitCount)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -539,7 +539,7 @@ func RegisterPoolMetrics(
 						Help: "Time spent waiting for Redis pool connections.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().WaitDurationNs) / float64(time.Second)
+						return float64(redisClient.UniversalClient().PoolStats().WaitDurationNs) / float64(time.Second)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -548,7 +548,7 @@ func RegisterPoolMetrics(
 						Help: "Unusable connections found in the Redis pool.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().Unusable)
+						return float64(redisClient.UniversalClient().PoolStats().Unusable)
 					},
 				),
 				prometheus.NewCounterFunc(
@@ -557,7 +557,7 @@ func RegisterPoolMetrics(
 						Help: "Stale connections removed from the Redis pool.",
 					},
 					func() float64 {
-						return float64(redisClient.PoolStats().StaleConns)
+						return float64(redisClient.UniversalClient().PoolStats().StaleConns)
 					},
 				),
 			}

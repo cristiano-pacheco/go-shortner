@@ -7,24 +7,24 @@ import (
 
 	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/errs"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/model"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
 )
 
 type LinkRepository struct {
-	database *database.Database
+	database *gorm.DB
 	metrics  *metrics.Metrics
 }
 
 var _ port.LinkRepository = (*LinkRepository)(nil)
 
-func NewLinkRepository(database *database.Database, metrics *metrics.Metrics) *LinkRepository {
+func NewLinkRepository(database *gorm.DB, metrics *metrics.Metrics) *LinkRepository {
 	return &LinkRepository{database: database, metrics: metrics}
 }
 
@@ -38,8 +38,11 @@ func (r *LinkRepository) Create(ctx context.Context, link model.LinkModel) (mode
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	link.ID, link.CreatedAt, link.UpdatedAt, link.DeletedAt = 0, now, now, nil
 
-	resultErr = gorm.G[model.LinkModel](r.database.DB).Create(ctx, &link)
-	if errors.Is(resultErr, gorm.ErrDuplicatedKey) {
+	resultErr = gorm.G[model.LinkModel](r.database).Create(ctx, &link)
+
+	var postgresError *pgconn.PgError
+	if errors.Is(resultErr, gorm.ErrDuplicatedKey) ||
+		(errors.As(resultErr, &postgresError) && postgresError.Code == "23505") {
 		resultErr = errs.ErrCodeConflict
 	}
 
@@ -57,7 +60,7 @@ func (r *LinkRepository) FindByID(ctx context.Context, id int64) (model.LinkMode
 	var resultErr error
 	defer r.observe("find_by_id", time.Now(), &resultErr)
 
-	link, err := gorm.G[model.LinkModel](r.database.DB).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
+	link, err := gorm.G[model.LinkModel](r.database).Where("id = ? AND deleted_at IS NULL", id).Limit(1).First(ctx)
 	link, resultErr = r.found(link, err)
 
 	return link, resultErr
@@ -71,7 +74,7 @@ func (r *LinkRepository) FindByCode(ctx context.Context, code string) (model.Lin
 	defer r.observe("find_by_code", time.Now(), &resultErr)
 
 	link, err := gorm.G[model.LinkModel](
-		r.database.DB,
+		r.database,
 	).Where("code = ? AND deleted_at IS NULL", code).
 		Limit(1).
 		First(ctx)
