@@ -19,7 +19,7 @@ x-app: &app
     DATABASE_NAME: shortner_load
     DATABASE_USER: shortner_load
     DATABASE_PASSWORD: load-test-only
-    DATABASE_SSLMODE: disable
+    DATABASE_SSLMODE: "false"
     REDIS_URL: redis://redis:6379/0
     API_KEY: load-test-only
     PUBLIC_BASE_URL: http://localhost:${LOAD_PORT:-8088}

@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/cristiano-pacheco/bricks/pkg/itestkit"
+	"github.com/cristiano-pacheco/bricks/pkg/redis"
 	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	playgroundvalidator "github.com/go-playground/validator/v10"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/fx"
 
@@ -23,9 +24,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/port"
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
-	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 type LinkValidationUseCaseSuite struct {
@@ -59,14 +58,22 @@ func (s *LinkValidationUseCaseSuite) SetupSuite() {
 	s.Require().NoError(s.kit.StartPostgres())
 	s.Require().NoError(s.kit.StartRedis())
 	s.Require().NoError(s.kit.RunMigrations())
-	s.kit.DB().TranslateError = true
 }
 
 func (s *LinkValidationUseCaseSuite) SetupTest() {
 	s.kit.TruncateTables(s.T())
 	s.Require().NoError(s.kit.Redis().FlushDB(context.Background()).Err())
-	redisClient, ok := s.kit.Redis().(*redis.Client)
+	redisClient, ok := s.kit.Redis().(*goredis.Client)
 	s.Require().True(ok)
+
+	bricksClient, err := redis.NewClient(context.Background(), redis.Config{
+		Type: redis.ClientTypeSingleNode,
+		URL:  "redis://" + redisClient.Options().Addr,
+	})
+	s.Require().NoError(err)
+	s.T().Cleanup(func() {
+		s.NoError(bricksClient.Close())
+	})
 	s.registry = prometheus.NewRegistry()
 	app := fx.New(
 		fx.NopLogger,
@@ -75,8 +82,8 @@ func (s *LinkValidationUseCaseSuite) SetupTest() {
 		fx.Provide(metrics.New),
 		fx.Supply(fx.Annotate(s.registry, fx.As(new(prometheus.Registerer)))),
 		fx.Supply(
-			&database.Database{DB: s.kit.DB()},
-			&sharedredis.Client{Client: redisClient},
+			s.kit.DB(),
+			bricksClient,
 			config.Config{PublicBaseURL: "https://short.example"},
 		),
 		fx.Populate(

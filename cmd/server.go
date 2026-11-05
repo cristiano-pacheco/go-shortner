@@ -5,8 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/database"
 	bricksmetrics "github.com/cristiano-pacheco/bricks/pkg/http/server/metrics"
 	"github.com/cristiano-pacheco/bricks/pkg/otel/trace"
+	"github.com/cristiano-pacheco/bricks/pkg/redis"
 	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
@@ -14,10 +16,8 @@ import (
 
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/httpserver"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 func runServer(cmd *cobra.Command, _ []string) (runErr error) {
@@ -38,7 +38,7 @@ func runServer(cmd *cobra.Command, _ []string) (runErr error) {
 		fx.Provide(metrics.New),
 		bricksmetrics.Module,
 		database.Module,
-		redis.Module,
+		redis.ClientModule,
 		fx.Invoke(metrics.RegisterPoolMetrics),
 		shortener.Module,
 		httpserver.Module,

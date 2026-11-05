@@ -16,13 +16,29 @@ app:
     enabled: true
     address: "0.0.0.0"
     port: 9090
-  database_host: "env://DATABASE_HOST"
-  database_port: "env://DATABASE_PORT"
-  database_name: "env://DATABASE_NAME"
-  database_user: "env://DATABASE_USER"
-  database_password: "env://DATABASE_PASSWORD"
-  database_sslmode: "env://DATABASE_SSLMODE"
-  redis_url: "env://REDIS_URL"
+  database:
+    host: "env://DATABASE_HOST"
+    port: "env://DATABASE_PORT"
+    name: "env://DATABASE_NAME"
+    user: "env://DATABASE_USER"
+    password: "env://DATABASE_PASSWORD"
+    sslmode: "env://DATABASE_SSLMODE"
+    maxopenconnections: 10
+    maxidleconnections: 5
+    connecttimeout: 3
+    statementtimeout: 5000
+    timezone: UTC
+  redis:
+    type: single_node
+    url: "env://REDIS_URL"
+    db: 0
+    password: "env://REDIS_PASSWORD"
+    dialtimeout: 1s
+    readtimeout: 1s
+    writetimeout: 1s
+    pooltimeout: 1s
+    maxretries: 1
+    contexttimeoutenabled: true
   api_key: "env://API_KEY"
   public_base_url: "env://PUBLIC_BASE_URL"
   http_addr: "env://HTTP_ADDR"

@@ -14,7 +14,7 @@ services:
       DATABASE_NAME: ${POSTGRES_DB:-shortener}
       DATABASE_USER: ${POSTGRES_USER:-shortener}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      DATABASE_SSLMODE: disable
+      DATABASE_SSLMODE: "false"
       REDIS_URL: redis://redis:6379/0
       API_KEY: ${API_KEY:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}

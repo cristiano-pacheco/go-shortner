@@ -21,6 +21,6 @@ The [glossary](GLOSSARY.md) defines these terms. Use the links below to find the
 | HTTP routes and request contracts | [Router](internal/modules/shortener/http/chi/router/link_router.go), [server](internal/shared/httpserver/server.go), [DTOs](internal/modules/shortener/http/dto/link_dto.go). |
 | Management authentication | [API key middleware](internal/shared/httpserver/api_key_middleware.go). |
 | Configuration and public base URL | [Configuration](internal/shared/config/config.go). |
-| Module composition and resources | [Shortener Fx module](internal/modules/shortener/fx.go), [server composition](cmd/server.go), [PostgreSQL provider](internal/shared/database/database.go), [Redis provider](internal/shared/redis/redis.go). |
+| Module composition and resources | [Shortener Fx module](internal/modules/shortener/fx.go), [server composition](cmd/server.go), [Bricks PostgreSQL and Redis modules](cmd/server.go). |
 | Embedded migrations and execution | [Shortener Fx module](internal/modules/shortener/fx.go), [embedded SQL files](internal/modules/shortener/migration/migration.go), [migration runner](internal/shared/migration/runner.go), [migration command](cmd/migrate.go). |
 | HTTP verification | [End-to-end tests](test/e2e/modules/shortner/), [Make commands](docs/agents/make-commands.md). |

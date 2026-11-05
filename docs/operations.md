@@ -4,6 +4,8 @@
 
 Install Docker and Docker Compose. Host execution also requires Go 1.27.3. `make setup` creates `.env` with local credentials if it does not exist. Never commit credentials. For host execution, `DATABASE_PASSWORD` must match `POSTGRES_PASSWORD`. Set `COMPOSE_ENV_FILE` when invoking Make to use a different file.
 
+PostgreSQL and Redis use the Bricks configuration sections `app.database` and `app.redis` in `config/base.yaml`. `DATABASE_SSLMODE` is a boolean: `false` disables PostgreSQL TLS and `true` requires it; `verify-ca` and `verify-full` are not supported by the Bricks database module. Existing `.env` files using `disable` or `require` must be updated to `false` or `true` respectively. Redis uses the `db` and `password` fields in `app.redis` (the latter reads `REDIS_PASSWORD`), overriding values embedded in `REDIS_URL`. A nonempty Redis password enables TLS in Bricks; configure a TLS-enabled Redis endpoint when using one. Avoid placing credentials in Redis URLs, as connection errors can expose them. Bricks' PostgreSQL DSN builder does not escape all credential characters, so credentials containing spaces or DSN-special characters may not work.
+
 The default public address is `http://localhost:8080`. If you change `APP_PORT`, update `PUBLIC_BASE_URL` to the address clients should use. Compose binds service ports to localhost. See [.env.example](../.env.example) for all settings. Redis must be reachable when the application starts.
 
 ## Set up the project

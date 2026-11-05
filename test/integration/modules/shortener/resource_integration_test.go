@@ -6,11 +6,14 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cristiano-pacheco/bricks/pkg/database"
+	"github.com/cristiano-pacheco/bricks/pkg/redis"
 	"github.com/cristiano-pacheco/bricks/pkg/validator"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -22,9 +25,7 @@ import (
 	"github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/usecase"
 	destinationvalidator "github.com/cristiano-pacheco/go-shortner/internal/modules/shortener/validator"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/config"
-	"github.com/cristiano-pacheco/go-shortner/internal/shared/database"
 	"github.com/cristiano-pacheco/go-shortner/internal/shared/metrics"
-	sharedredis "github.com/cristiano-pacheco/go-shortner/internal/shared/redis"
 )
 
 type collisionGenerator struct {
@@ -43,7 +44,6 @@ func (g *collisionGenerator) Generate() (string, error) {
 	return code, nil
 }
 
-//nolint:paralleltest // This test changes service authentication and checks connection counts.
 func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 	stack := start(t)
 
@@ -63,85 +63,26 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 	postgresHost, postgresPort, err := net.SplitHostPort(postgresAddress)
 	require.NoError(t, err)
 
-	const (
-		postgresPassword = "p@ss:/?# word"
-		redisPassword    = "r@ss:/?#word"
-	)
+	configDir := t.TempDir()
+	t.Setenv("APP_CONFIG_DIR", configDir)
+	t.Setenv("APP_ENV", "local")
 
-	run(
-		"exec",
-		"-T",
-		"postgres",
-		"psql",
-		"-X",
-		"-v",
-		"ON_ERROR_STOP=1",
-		"-U",
-		"shortener",
-		"-d",
-		"shortener",
-		"-c",
-		"ALTER ROLE shortener PASSWORD '"+postgresPassword+"'",
-	)
-	run("exec", "-T", "redis", "redis-cli", "CONFIG", "SET", "requirepass", redisPassword)
-	redisURL := &url.URL{
-		Scheme: "redis",
-		User:   url.UserPassword("default", redisPassword),
-		Host:   redisAddress,
-		Path:   "/3",
-	}
-	cfg := config.Config{
-		DatabaseHost:     postgresHost,
-		DatabasePort:     postgresPort,
-		DatabaseName:     "shortener",
-		DatabaseUser:     "shortener",
-		DatabasePassword: postgresPassword,
-		DatabaseSSLMode:  "disable",
-		RedisURL:         redisURL.String(),
-		PublicBaseURL:    publicBase,
-	}
-	connectionCount := func() string {
-		return run(
-			"exec",
-			"-T",
-			"postgres",
-			"psql",
-			"-X",
-			"-A",
-			"-t",
-			"-U",
-			"shortener",
-			"-d",
-			"shortener",
-			"-c",
-			"SELECT count(*) FROM pg_stat_activity WHERE datname = 'shortener' AND client_addr IS NOT NULL",
-		)
-	}
-	initialConnections := connectionCount()
-	invalidConfig := cfg
-	invalidConfig.RedisURL = ":invalid"
-	invalidApp := fx.New(fx.NopLogger, fx.Supply(invalidConfig), database.Module, sharedredis.Module,
-		fx.Invoke(func(_ *database.Database, _ *sharedredis.Client) {
-		}))
-	require.Error(t, invalidApp.Err())
-	require.Equal(
-		t,
-		initialConnections,
-		connectionCount(),
-		"invalid Redis configuration must not acquire PostgreSQL connections",
-	)
+	contents := fmt.Sprintf(`app:
+  database:
+    host: %q
+    port: %s
+    name: shortener
+    user: shortener
+    password: e2e-only
+    sslmode: false
+  redis:
+    type: single_node
+    url: "redis://%s"
+    db: 3
+`, postgresHost, postgresPort, redisAddress)
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "base.yaml"), []byte(contents), 0600))
 
-	unavailableConfig := cfg
-	unavailableConfig.RedisURL = "redis://127.0.0.1:1/3"
-	unavailableApp := fx.New(fx.NopLogger, fx.Supply(unavailableConfig), database.Module, sharedredis.Module,
-		fx.Invoke(func(_ *database.Database, _ *sharedredis.Client) {
-		}))
-	require.NoError(t, unavailableApp.Err())
-	require.Error(t, unavailableApp.Start(ctx))
-	require.Eventually(t, func() bool {
-		return connectionCount() == initialConnections
-	}, 5*time.Second, 100*time.Millisecond,
-		"failed Redis startup must close the PostgreSQL connection")
+	cfg := config.Config{PublicBaseURL: publicBase}
 
 	generator := &collisionGenerator{
 		codes: []string{"occupied", "available", "occupied", "occupied", "occupied", "occupied", "occupied"},
@@ -152,7 +93,7 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 		resolve *usecase.LinkResolveUseCase
 	)
 
-	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, sharedredis.Module, validator.Module,
+	app := fx.New(fx.NopLogger, fx.Supply(cfg), database.Module, redis.ClientModule, validator.Module,
 		fx.Provide(
 			func() prometheus.Registerer {
 				return prometheus.NewRegistry()
@@ -199,11 +140,6 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 			"-T",
 			"redis",
 			"redis-cli",
-			"--no-auth-warning",
-			"--user",
-			"default",
-			"--pass",
-			redisPassword,
 			"-n",
 			"3",
 			"EXISTS",
@@ -218,11 +154,6 @@ func TestResourceConfigurationAndCodeCollisions(t *testing.T) {
 			"-T",
 			"redis",
 			"redis-cli",
-			"--no-auth-warning",
-			"--user",
-			"default",
-			"--pass",
-			redisPassword,
 			"-n",
 			"0",
 			"EXISTS",

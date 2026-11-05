@@ -191,7 +191,7 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 	s.Equal("https://example.com/path", headers.Get("Location"))
 	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
 	s.Require().Error(err, "server should reject unavailable Redis: %s", out)
-	s.Contains(string(out), "cannot connect to Redis")
+	s.Contains(string(out), "connection failed to redis://")
 	out, err = s.http.run("up", "-d", "--wait", "redis")
 	s.Require().NoError(err, "%s", out)
 	out, err = s.http.run("stop", "postgres")
@@ -203,7 +203,7 @@ func (s *RedirectLinkSuite) TestDependencyFailureAndRestart() {
 
 	out, err = s.http.run("run", "--rm", "--no-deps", "app", "server")
 	s.Require().Error(err, "server should reject unavailable PostgreSQL: %s", out)
-	s.Contains(string(out), "cannot connect to PostgreSQL")
+	s.Contains(string(out), "failed to connect to database")
 	out, err = s.http.run("up", "-d", "--wait", "postgres")
 	s.Require().NoError(err, "%s", out)
 	out, err = s.http.run("restart", "app")
