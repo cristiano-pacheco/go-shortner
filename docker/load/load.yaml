@@ -1,0 +1,3 @@
+app:
+  open-telemetry:
+    trace_enabled: false

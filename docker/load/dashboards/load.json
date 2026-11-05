@@ -1,0 +1,16 @@
+{
+  "uid": "load-test",
+  "title": "Load test · live",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "k6 requests / second", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}, "targets": [{"expr": "sum(rate(k6_http_reqs_total[1m]))", "refId": "A"}]},
+    {"id": 2, "type": "timeseries", "title": "k6 max per-series request p95 (seconds)", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}, "targets": [{"expr": "max(k6_http_req_duration_p95)", "refId": "A"}]},
+    {"id": 3, "type": "timeseries", "title": "k6 maximum per-series failure rate", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}, "targets": [{"expr": "max(k6_http_req_failed_rate)", "refId": "A"}]},
+    {"id": 4, "type": "timeseries", "title": "k6 virtual users", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}, "targets": [{"expr": "max(k6_vus)", "refId": "A"}]},
+    {"id": 5, "type": "timeseries", "title": "Application instances up", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 0, "y": 16, "w": 24, "h": 7}, "targets": [{"expr": "up{job=\"shortener\"}", "legendFormat": "{{instance}}", "refId": "A"}]}
+  ]
+}

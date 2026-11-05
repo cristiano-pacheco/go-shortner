@@ -1,0 +1,125 @@
+name: shortner-load
+
+x-app: &app
+  image: shortner-load-app:local
+  build:
+    context: ..
+  cpus: 0.5
+  mem_limit: 128m
+  stop_grace_period: 35s
+  volumes:
+    - ./load/load.yaml:/app/config/load.yaml:ro
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &app-environment
+    APP_ENV: load
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: shortner_load
+    DATABASE_USER: shortner_load
+    DATABASE_PASSWORD: load-test-only
+    DATABASE_SSLMODE: disable
+    REDIS_URL: redis://redis:6379/0
+    API_KEY: load-test-only
+    PUBLIC_BASE_URL: http://localhost:${LOAD_PORT:-8088}
+    HTTP_ADDR: :8080
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17.5-alpine@sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa
+    environment:
+      POSTGRES_DB: shortner_load
+      POSTGRES_USER: shortner_load
+      POSTGRES_PASSWORD: load-test-only
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: shortner-load-app:local
+    build:
+      context: ..
+    command: [migrate]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app1:
+    <<: *app
+  app2:
+    <<: *app
+
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${LOAD_PORT:-8088}:8080"
+    volumes:
+      - ./load/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app1
+      - app2
+
+  prometheus:
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver"]
+    ports:
+      - "127.0.0.1:${LOAD_PROMETHEUS_PORT:-9092}:9090"
+    volumes:
+      - ./load/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
+    ports:
+      - "127.0.0.1:${LOAD_GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./load/datasources.yaml:/etc/grafana/provisioning/datasources/load.yaml:ro
+      - ./load/dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/load.yaml:ro
+      - ./load/dashboards:/var/lib/grafana/dashboards/load:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards/shortener:ro
+    depends_on:
+      - prometheus
+
+  k6:
+    image: grafana/k6:0.57.0
+    profiles: [load]
+    user: "${LOAD_UID:-65532}:${LOAD_GID:-65532}"
+    volumes:
+      - ../test/load:/scripts:ro
+      - ${LOAD_RESULTS_DIR:-../reports/load}:/results
+    environment:
+      BASE_URL: http://proxy:8080
+      API_KEY: load-test-only
+      VUS: ${LOAD_VUS:-10}
+      DURATION: ${LOAD_DURATION:-2m}
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 2s
+      K6_PROMETHEUS_RW_TREND_STATS: p(95),avg
+      K6_SYSTEM_TAGS: status,method,name,scenario,expected_response
+    command: [run, /scripts/redirect.js]
+
+volumes:
+  postgres_data:

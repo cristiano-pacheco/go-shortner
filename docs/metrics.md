@@ -63,8 +63,9 @@ excluding pool, Go and process collectors. These are theoretical bounds, not
 measured cardinalities. Repository list duration covers both count and data
 reads, not one query.
 
-The provisioned dashboard groups HTTP traffic and latency, use-case outcomes,
-resolution source, cache decisions and failures, generation events, repository
-operations, connection pools, process memory and Go runtime metrics. Select an
-instance and time range in Grafana. Empty panels during idle periods do not by
-themselves indicate an outage.
+The dashboard uses RED and Golden Signals: current indicators, trends, then
+collapsed diagnostics. Select instances and a time range. Thresholds are triage
+references, not SLOs: 5xx 1%/5%, p95 100/250ms, SQL occupancy 80%/95%.
+SQL occupancy shows the busiest instance. Missing data is not success; idle is
+not an outage. Route-error rankings use the selected range; rates use Grafana's
+adaptive interval.

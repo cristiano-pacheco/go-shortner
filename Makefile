@@ -93,6 +93,10 @@ test-integration-race:
 test-integration-cover:
 	@./scripts/integration-test.sh test-cover
 
+.PHONY: test-load
+test-load:
+	@./scripts/load-test.sh
+
 .PHONY: test-e2e
 test-e2e:
 	bash ./scripts/e2e-test.sh
