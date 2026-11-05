@@ -1,0 +1,14 @@
+apiVersion: 1
+providers:
+  - name: load
+    type: file
+    disableDeletion: false
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards/load
+  - name: shortener
+    type: file
+    disableDeletion: false
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards/shortener
