@@ -91,33 +91,47 @@ How to read it:
 - **PostgreSQL** — the single source of truth: soft deletes, expiration, active state, and the counters that keep pagination totals exact.
 - **Prometheus + Tempo → Grafana** — both servers export metrics and traces on their own listeners.
 
-A single redirect, step by step:
+A single redirect, as a decision flow — every branch ends in either `302` or `404`:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor V as 👤 Visitor
-    participant P as ⚡ public-server
-    participant R as 🫙 Redis
-    participant D as 🐘 PostgreSQL
+flowchart TD
+    REQ(["🧭 GET /go"])
+    CACHED{"🫙 snapshot<br>in Redis?"}
+    VALID{"active and<br>not expired?"}
+    DB[("🐘 PostgreSQL<br>destination · active · expires_at")]
+    ROW{"usable row?<br>active · not expired · not deleted"}
+    STORE["🫙 store snapshot<br>TTL ≤ 60 s"]
+    OK(["✅ 302 Found<br>+ Location"])
+    NF(["🚫 404 Not Found"])
 
-    V->>P: GET /go
-    P->>R: get snapshot for code "go"
-    alt snapshot exists · active · not expired
-        R-->>P: destination
-        P-->>V: 302 Found + Location
-    else cache miss (or Redis down)
-        R-->>P: nothing usable
-        P->>D: SELECT destination, active, expires_at
-        alt link exists · active · not expired
-            D-->>P: row
-            P->>R: store snapshot · TTL ≤ 60 s
-            P-->>V: 302 Found + Location
-        else unknown · inactive · expired · deleted
-            D-->>P: no usable row
-            P-->>V: 404 Not Found
-        end
-    end
+    REQ --> CACHED
+    CACHED -->|"yes"| VALID
+    CACHED -->|"no · or Redis down"| DB
+    VALID -->|"yes"| OK
+    VALID -->|"no"| DB
+    DB --> ROW
+    ROW -->|"yes"| STORE
+    STORE --> OK
+    ROW -->|"no"| NF
+
+    classDef client fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#075985
+    classDef decide fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef data fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef win fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef fail fill:#fff1f2,stroke:#e11d48,stroke-width:2px,color:#881337
+    classDef store fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#78350f
+
+    class REQ client
+    class CACHED,VALID,ROW decide
+    class DB data
+    class STORE store
+    class OK win
+    class NF fail
+
+    linkStyle 0,1,4 stroke:#d97706,stroke-width:2.5px
+    linkStyle 3,7 stroke:#16a34a,stroke-width:2.5px
+    linkStyle 8 stroke:#e11d48,stroke-width:2.5px
+    linkStyle 2,5,6 stroke:#059669,stroke-width:2.5px
 ```
 
 ## Run
