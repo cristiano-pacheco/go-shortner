@@ -143,10 +143,12 @@ services:
       RATE: ${LOAD_RATE:-0}
       WARMUP_REQUESTS: ${LOAD_WARMUP_REQUESTS:-0}
       MAX_VUS: ${LOAD_MAX_VUS:-200}
+      REDIRECT_REPEATS: ${LOAD_REDIRECT_REPEATS:-}
+      REDIRECT_BATCH_SIZE: ${LOAD_REDIRECT_BATCH_SIZE:-1}
       K6_OUT: experimental-prometheus-rw
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
       K6_PROMETHEUS_RW_PUSH_INTERVAL: 2s
-      K6_PROMETHEUS_RW_TREND_STATS: p(95),avg
+      K6_PROMETHEUS_RW_TREND_STATS: p(95),p(99),avg
       K6_SYSTEM_TAGS: status,method,name,scenario,expected_response
     command: [run, /scripts/redirect.js]
 

@@ -64,9 +64,12 @@ excluding pool, Go and process collectors. These are theoretical bounds, not
 measured cardinalities. Repository list duration covers both count and data
 reads, not one query.
 
-The dashboard uses RED and Golden Signals: current indicators, trends, then
-collapsed diagnostics. Select instances and a time range. Thresholds are triage
-references, not SLOs: 5xx 1%/5%, p95 100/250ms, SQL occupancy 80%/95%.
-SQL occupancy shows the busiest instance. Missing data is not success; idle is
-not an outage. Route-error rankings use the selected range; rates use Grafana's
-adaptive interval.
+The dashboard opens with selected-range summaries, horizontal throughput bars per
+endpoint and a full-width latency table with mean, p50, p90 and p99. Resource charts
+show Go CPU, memory, resolution sources and SQL utilization.
+Diagnostics stay collapsed. Select instances and a time range. Thresholds are triage
+references, not SLOs: 5xx 1%/5%, p99 100/250ms, SQL occupancy 80%/95%.
+The p99 card shows the maximum rolling p99, not a whole-run percentile. CPU and memory
+cards show sampled combined peaks across the selected Go processes. Missing data is
+not success; idle is not an outage. Route-error rankings use the selected range;
+rates use Grafana's adaptive interval. See the [dashboard guide](dashboard.md).

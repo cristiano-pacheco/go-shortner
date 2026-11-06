@@ -1,6 +1,6 @@
 # Performance
 
-Measured on 2026-11-05. One million visible links. Metrics enabled, tracing disabled.
+Historical benchmarks measured on 2026-11-05. One million visible links. Metrics enabled, tracing disabled. The final section records the new workloads with tracing enabled. Portable results are in [benchmarks.json](benchmarks.json).
 
 ## Pool tuning
 
@@ -96,3 +96,21 @@ After concurrent mixed load, maintained and independently counted totals both eq
 Redirect tests alternate GET and HEAD over 1,000 mostly cached codes. Nginx does not cache responses. Listing tests cover only page 1. Deep offsets still require proportional scanning. Soft-deleted rows accumulate between runs.
 
 These are single Compose trials, not cold-cache, TLS or long-running production tests. Generator contention and tracing can change results.
+
+## Repeated-read workloads
+
+Measured on 2026-11-06 with the existing application image, metrics enabled and 1% root-trace sampling. Both Go containers retained their 32 MiB limits, with public capped at 1 CPU and management at 0.5 CPU. One million visible links. The PostgreSQL pool remained 30 open / 10 idle. Each configuration ran once.
+
+| Scenario | Virtual users | Reads per code / batch size | Duration | Requests/s | HTTP p99 |
+| --- | ---: | --- | --- | ---: | ---: |
+| Redirect, sequential | 50 | 1 / 1 | 60s | 24,922 | 6.93 ms |
+| Redirect, repeated bursts | 10 | 20 / 5 | 60s | 25,184 | 4.80 ms |
+| Read-heavy CRUD + redirects | 20 | 20 / 10 | 30s | 7,219 | 60.10 ms |
+
+All three runs passed the new p99 gates, with zero HTTP errors, 100% passing response checks and exact maintained link counts. Neither Go container was OOM-killed or restarted during a run.
+
+Both redirect trials used 1,000 seeded codes and 1,000 warmup requests. The baseline used 50 sequential users; the burst trial used 10 users with up to five concurrent requests each. Throughput differed by about 1%. This short comparison does not establish a repeatable throughput gain. The burst trial's client p99 was lower.
+
+The read-heavy workload creates, gets, lists and updates a link, reads its redirect 20 times, then deletes it. A successful iteration makes 25 requests. Each read must resolve to the updated destination. Its higher read share means its aggregate rate is not directly comparable to the historical seven-request mixed workload. The 30-second run validates the new workload; it is not a sustained-capacity test.
+
+These runs include tracing overhead and use different request patterns from the historical results. The historical 27,179 redirects/s remains labeled with its original configuration. New summaries record p99 directly; historical p95 values have not been relabeled.

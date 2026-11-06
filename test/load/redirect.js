@@ -7,30 +7,44 @@ const updatedDestination = 'https://example.org/load-test';
 const headers = { 'Content-Type': 'application/json', 'X-API-Key': __ENV.API_KEY };
 
 const workload = __ENV.WORKLOAD || 'mixed';
-if (!['mixed', 'redirect', 'list'].includes(workload)) {
-  throw new Error('WORKLOAD must be mixed, redirect or list');
+if (!['mixed', 'read-heavy', 'redirect', 'list'].includes(workload)) {
+  throw new Error('WORKLOAD must be mixed, read-heavy, redirect or list');
 }
-const operations = workload === 'mixed'
+function integerSetting(name, fallback, minimum, maximum = Number.MAX_SAFE_INTEGER) {
+  const value = Number(__ENV[name] || fallback);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+const redirectRepeats = integerSetting('REDIRECT_REPEATS', workload === 'read-heavy' ? 20 : workload === 'redirect' ? 1 : 2, workload === 'redirect' || workload === 'list' ? 1 : 2, 1000);
+const redirectBatchSize = integerSetting('REDIRECT_BATCH_SIZE', 1, 1, 200);
+const hotSet = integerSetting('HOT_SET', 1000, 1);
+const operations = workload === 'mixed' || workload === 'read-heavy'
   ? ['create', 'get', 'list', 'update', 'redirect_get', 'redirect_head', 'delete']
   : workload === 'list' ? ['list'] : ['redirect_get', 'redirect_head'];
 const operationThresholds = {};
 for (const operation of operations) {
   operationThresholds[`checks{operation:${operation}}`] = ['rate>0.99'];
-  operationThresholds[`http_req_duration{operation:${operation}}`] = ['p(95)<500'];
+  operationThresholds[`http_req_duration{operation:${operation}}`] = ['p(99)<500'];
 }
 
-const vus = Number(__ENV.VUS || 10);
+const vus = integerSetting('VUS', 10, 1);
 const duration = __ENV.DURATION || '2m';
-const rate = Number(__ENV.RATE || 0);
-const warmupRequests = Number(__ENV.WARMUP_REQUESTS || 0);
+const rate = integerSetting('RATE', 0, 0);
+const warmupRequests = integerSetting('WARMUP_REQUESTS', 0, 0);
+const maxVUs = integerSetting('MAX_VUS', vus * 4, rate > 0 ? vus : 1);
+const requestsPerIteration = workload === 'list' ? 1 : workload === 'redirect' ? redirectRepeats : 5 + redirectRepeats;
 export const options = {
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
   batch: 200,
   batchPerHost: 200,
   ...(rate > 0 ? {
     scenarios: {
       offered_load: {
         executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration,
-        preAllocatedVUs: vus, maxVUs: Number(__ENV.MAX_VUS || vus * 4),
+        preAllocatedVUs: vus, maxVUs,
       },
     },
   } : { vus, duration }),
@@ -40,7 +54,7 @@ export const options = {
     checks: ['rate>0.99'],
     ...operationThresholds,
     ...(rate > 0 ? { dropped_iterations: ['count==0'] } : {}),
-    'http_req_duration{phase:workload}': ['p(95)<500'],
+    'http_req_duration{phase:workload}': ['p(99)<500'],
   },
 };
 
@@ -74,7 +88,6 @@ export function setup() {
   if (warmupRequests > 0 && workload === 'redirect') {
     // Prime the working set AND upstream connections before offered-rate timing.
     // These requests are excluded from workload latency/error thresholds.
-    const hotSet = Number(__ENV.HOT_SET || 1000);
     for (let start = 0; start < warmupRequests; start += 200) {
       const batch = [];
       for (let i = start; i < Math.min(start + 200, warmupRequests); i++) {
@@ -93,15 +106,9 @@ export function setup() {
 export default function () {
   if (workload === 'redirect') {
     // A bounded, seeded hot set: no writes or redirects to external hosts.
-    const n = 1 + ((__VU * 997 + __ITER) % Number(__ENV.HOT_SET || 1000));
+    const n = 1 + ((__VU * 997 + __ITER) % hotSet);
     const url = `${baseURL}/loadseed_${n}`;
-    const operation = __ITER % 2 === 0 ? 'redirect_get' : 'redirect_head';
-    const response = operation === 'redirect_get'
-      ? http.get(url, { redirects: 0, tags: { name: 'redirect GET', operation } })
-      : http.head(url, { redirects: 0, tags: { name: 'redirect HEAD', operation } });
-    check(response, {
-      'seeded link redirects correctly': (r) => r.status === 302 && r.headers.Location === `https://example.com/load-seed/${n}`,
-    }, { operation });
+    redirectBurst(url, `https://example.com/load-seed/${n}`);
     return;
   }
   if (workload === 'list') {
@@ -137,18 +144,34 @@ export default function () {
   }, { operation: 'update' });
 
   const redirectURL = `${baseURL}/${link.code}`;
-  const redirect = http.get(redirectURL, { redirects: 0, tags: { name: 'redirect GET', operation: 'redirect_get' } });
-  check(redirect, {
-    'GET redirects to updated destination': (r) => r.status === 302 && r.headers.Location === updatedDestination,
-  }, { operation: 'redirect_get' });
-
-  const head = http.head(redirectURL, { redirects: 0, tags: { name: 'redirect HEAD', operation: 'redirect_head' } });
-  check(head, {
-    'HEAD returns redirect headers without a body': (r) => r.status === 302 && r.headers.Location === updatedDestination && !r.body,
-  }, { operation: 'redirect_head' });
+  // Repeated reads happen after the update and before deletion. Every response
+  // must point to the updated destination, including concurrent cache fills.
+  redirectBurst(redirectURL, updatedDestination);
 
   const deleted = http.del(linkURL, null, { headers, tags: { name: 'delete link', operation: 'delete' } });
   check(deleted, { 'delete returns 204': (r) => r.status === 204 }, { operation: 'delete' });
+}
+
+function redirectBurst(url, expectedDestination) {
+  for (let start = 0; start < redirectRepeats; start += redirectBatchSize) {
+    const requests = [];
+    for (let offset = start; offset < Math.min(start + redirectBatchSize, redirectRepeats); offset++) {
+      const method = (__ITER * redirectRepeats + offset) % 2 === 0 ? 'GET' : 'HEAD';
+      const operation = method === 'GET' ? 'redirect_get' : 'redirect_head';
+      requests.push({ method, url, params: { redirects: 0, tags: { name: `redirect ${method}`, operation } } });
+    }
+    // A batch of one uses the original sequential path for baseline comparisons.
+    const responses = requests.length === 1
+      ? [http.request(requests[0].method, url, null, requests[0].params)]
+      : http.batch(requests);
+    responses.forEach((response, index) => {
+      const request = requests[index];
+      check(response, {
+        'redirect has the expected status and destination': (r) => r.status === 302 && r.headers.Location === expectedDestination,
+        ...(request.method === 'HEAD' ? { 'HEAD has no response body': (r) => !r.body } : {}),
+      }, { operation: request.params.tags.operation });
+    });
+  }
 }
 
 function listLinks() {
@@ -162,7 +185,7 @@ function listLinks() {
 }
 
 export function handleSummary(data) {
-  data.configuration = { workload, vus, duration, rate, warmupRequests, maxVUs: Number(__ENV.MAX_VUS || vus * 4), hotSet: Number(__ENV.HOT_SET || 1000) };
+  data.configuration = { workload, vus, duration, rate, warmupRequests, maxVUs, hotSet, redirectRepeats, redirectBatchSize, requestsPerIteration };
   const escaped = JSON.stringify(data, null, 2)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const rows = Object.entries(data.metrics).map(([name, metric]) => {

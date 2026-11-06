@@ -1,0 +1,143 @@
+{
+  "measured_on": "2026-11-05",
+  "visible_links": 1000000,
+  "tracing_enabled": false,
+  "p99_note": "Historical k6 summaries did not record p99. New runs record it. These p95 values must not be relabeled as p99.",
+  "results": [
+    {
+      "scenario": "redirect",
+      "executor": "closed-loop",
+      "virtual_users": 50,
+      "configured_duration": "60s",
+      "elapsed_seconds": 60.002935696,
+      "workload_requests": 1630844,
+      "workload_requests_per_second": 27179.403492231424,
+      "http_failure_rate": 0,
+      "checks_pass_rate": 1,
+      "http_p95_ms": 3.95745185,
+      "http_p99_ms": null,
+      "all_k6_thresholds_passed": true
+    },
+    {
+      "scenario": "mixed",
+      "executor": "closed-loop",
+      "virtual_users": 10,
+      "configured_duration": "2m",
+      "elapsed_seconds": 120.008267111,
+      "workload_requests": 849709,
+      "workload_requests_per_second": 7080.420544811912,
+      "http_failure_rate": 0,
+      "checks_pass_rate": 1,
+      "http_p95_ms": 2.2784821999999982,
+      "http_p99_ms": null,
+      "all_k6_thresholds_passed": true
+    },
+    {
+      "scenario": "original-mixed",
+      "executor": "closed-loop",
+      "virtual_users": 50,
+      "configured_duration": "1m0s",
+      "elapsed_seconds": 60.384816752,
+      "workload_requests": 23058,
+      "workload_requests_per_second": 381.8509559232255,
+      "http_failure_rate": 0,
+      "checks_pass_rate": 1,
+      "http_p95_ms": 574.74492325,
+      "http_p99_ms": null,
+      "all_k6_thresholds_passed": false
+    },
+    {
+      "scenario": "optimized-mixed-equal-cpu",
+      "executor": "closed-loop",
+      "virtual_users": 50,
+      "configured_duration": "60s",
+      "elapsed_seconds": 60.05712084100001,
+      "workload_requests": 373597,
+      "workload_requests_per_second": 6220.694478329895,
+      "http_failure_rate": 0,
+      "checks_pass_rate": 1,
+      "http_p95_ms": 30.968351999999985,
+      "http_p99_ms": null,
+      "all_k6_thresholds_passed": true
+    }
+  ],
+  "current_runs": {
+    "measured_on": "2026-11-06",
+    "trace_sample_rate": 0.01,
+    "go_memory_limit_mib": 64,
+    "public_cpu_cap": 1,
+    "management_cpu_cap": 0.5,
+    "notes": "Existing application image. Modified k6 scripts. One trial per configuration. All had no OOM kills or restarts and exact visible-link counts. No host details included.",
+    "results": [
+      {
+        "scenario": "redirect-sequential",
+        "executor": "closed-loop",
+        "configuration": {
+          "maxVUs": 200,
+          "hotSet": 1000,
+          "workload": "redirect",
+          "vus": 50,
+          "duration": "60s",
+          "redirectBatchSize": 1,
+          "requestsPerIteration": 1,
+          "rate": 0,
+          "warmupRequests": 1000,
+          "redirectRepeats": 1
+        },
+        "elapsed_seconds": 60.281102909,
+        "workload_requests": 1502325,
+        "workload_requests_per_second": 24921.989271959756,
+        "http_failure_rate": 0,
+        "checks_pass_rate": 1,
+        "http_p99_ms": 6.931327839999999,
+        "all_k6_thresholds_passed": true
+      },
+      {
+        "scenario": "redirect-burst",
+        "executor": "closed-loop",
+        "configuration": {
+          "workload": "redirect",
+          "rate": 0,
+          "redirectRepeats": 20,
+          "redirectBatchSize": 5,
+          "vus": 10,
+          "duration": "60s",
+          "warmupRequests": 1000,
+          "maxVUs": 200,
+          "hotSet": 1000,
+          "requestsPerIteration": 20
+        },
+        "elapsed_seconds": 60.274120182,
+        "workload_requests": 1517920,
+        "workload_requests_per_second": 25183.611065853518,
+        "http_failure_rate": 0,
+        "checks_pass_rate": 1,
+        "http_p99_ms": 4.800455269999998,
+        "all_k6_thresholds_passed": true
+      },
+      {
+        "scenario": "read-heavy",
+        "executor": "closed-loop",
+        "configuration": {
+          "duration": "30s",
+          "rate": 0,
+          "maxVUs": 200,
+          "redirectRepeats": 20,
+          "redirectBatchSize": 10,
+          "requestsPerIteration": 25,
+          "workload": "read-heavy",
+          "vus": 20,
+          "warmupRequests": 0,
+          "hotSet": 1000
+        },
+        "elapsed_seconds": 30.05173268,
+        "workload_requests": 216950,
+        "workload_requests_per_second": 7219.217684056678,
+        "http_failure_rate": 0,
+        "checks_pass_rate": 1,
+        "http_p99_ms": 60.10483025,
+        "all_k6_thresholds_passed": true
+      }
+    ]
+  }
+}
