@@ -18,6 +18,21 @@ Run `./test/load/prepare-dataset-integration.sh` to test interruption, resume, c
 
 Set `LOAD_DATASET=1m` or `LOAD_DATASET=10m` on `make test-load` to select the corresponding volume. Without it, the historical `shortner-load` project remains the default. Compose projects expose the same ports, so stop the previous stack before starting another. To remove a selected population, use `docker compose -p shortner-load-1m -f docker/docker-compose.load.yaml down -v` (or substitute `shortner-load-10m`). This deletes that population.
 
+## Management capacity workloads
+
+Prepare a selected population first. The first management run creates a baseline in that dataset; later runs restore it before each repetition. Restoration replaces the `links` table and flushes Redis in the selected load project. Do not use these commands against data you need to keep. The baseline needs additional database storage.
+
+```sh
+LOAD_DATASET=1m LOAD_MANAGEMENT_PREPARE=snapshot SCENARIO=get ./scripts/run-management-load.sh
+LOAD_DATASET=1m SCENARIO=list_deep ./scripts/run-management-load.sh
+```
+
+Select `create`, `get`, `list`, `list_deep`, `update`, `delete` or `mixed` with `SCENARIO`. The isolated scenarios offer 1,010 requests per second; `mixed` offers 200 per second for each endpoint and is diagnostic. Each iteration makes one request. The default measured duration is 300 seconds, preceded by readiness and 1,000 warmup requests per operation. `DURATION_SECONDS`, `RATE`, `WARMUP_REQUESTS`, `VUS` and `MAX_VUS` override these settings for short checks. Overrides do not establish campaign capacity.
+
+Each run writes its preparation log, k6 events, summary and report to a new `reports/load/management-*` directory. The report separates offered rate, completed mean rate and the peak one-second window. It records late and incomplete requests and rejects errors, failed checks, dropped iterations and unmet isolated thresholds. The isolated list scenarios compare the returned total with the restored population. During the mixed scenario, concurrent writes prevent an independent exact-total check for each list response.
+
+Run `./test/load/management-interface-integration.sh` and `./test/load/prepare-management-integration.sh` for short interface and preparation checks. They use temporary Compose projects and volumes. Run `python3 -m unittest discover -s test/load -p 'test_management_report.py'` for report calculations. These checks do not replace the full campaign.
+
 ## Workloads
 
 | `LOAD_WORKLOAD` | Requests per iteration |
