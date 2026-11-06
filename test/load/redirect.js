@@ -21,9 +21,13 @@ function integerSetting(name, fallback, minimum, maximum = Number.MAX_SAFE_INTEG
 const redirectRepeats = integerSetting('REDIRECT_REPEATS', workload === 'read-heavy' ? 20 : workload === 'redirect' ? 1 : 2, workload === 'redirect' || workload === 'list' ? 1 : 2, 1000);
 const redirectBatchSize = integerSetting('REDIRECT_BATCH_SIZE', 1, 1, 200);
 const hotSet = integerSetting('HOT_SET', 1000, 1);
+const redirectMethod = __ENV.REDIRECT_METHOD || '';
+if (!['', 'GET', 'HEAD'].includes(redirectMethod) || (redirectMethod && workload !== 'redirect')) {
+  throw new Error('REDIRECT_METHOD must be GET or HEAD and is only supported for WORKLOAD=redirect');
+}
 const operations = workload === 'mixed' || workload === 'read-heavy'
   ? ['create', 'get', 'list', 'update', 'redirect_get', 'redirect_head', 'delete']
-  : workload === 'list' ? ['list'] : ['redirect_get', 'redirect_head'];
+  : workload === 'list' ? ['list'] : redirectMethod ? [`redirect_${redirectMethod.toLowerCase()}`] : ['redirect_get', 'redirect_head'];
 const operationThresholds = {};
 for (const operation of operations) {
   operationThresholds[`checks{operation:${operation}}`] = ['rate>0.99'];
@@ -33,6 +37,11 @@ for (const operation of operations) {
 const vus = integerSetting('VUS', 10, 1);
 const duration = __ENV.DURATION || '2m';
 const rate = integerSetting('RATE', 0, 0);
+const rateStages = __ENV.RATE_STAGES ? JSON.parse(__ENV.RATE_STAGES) : null;
+if (rateStages && (!Array.isArray(rateStages) || rateStages.length === 0 || rate === 0 ||
+  rateStages.some((stage) => !Number.isSafeInteger(stage.target) || stage.target < 1 || !/^\d+s$/.test(stage.duration)))) {
+  throw new Error('RATE_STAGES requires RATE > 0 and stages with positive integer targets and durations in seconds');
+}
 const warmupRequests = integerSetting('WARMUP_REQUESTS', 0, 0);
 const maxVUs = integerSetting('MAX_VUS', vus * 4, rate > 0 ? vus : 1);
 const requestsPerIteration = workload === 'list' ? 1 : workload === 'redirect' ? redirectRepeats : 5 + redirectRepeats;
@@ -43,7 +52,9 @@ export const options = {
   ...(rate > 0 ? {
     scenarios: {
       offered_load: {
-        executor: 'constant-arrival-rate', rate, timeUnit: '1s', duration,
+        executor: rateStages ? 'ramping-arrival-rate' : 'constant-arrival-rate',
+        ...(rateStages ? { startRate: rate, stages: rateStages } : { rate, duration }),
+        timeUnit: '1s',
         preAllocatedVUs: vus, maxVUs,
       },
     },
@@ -91,7 +102,7 @@ export function setup() {
     for (let start = 0; start < warmupRequests; start += 200) {
       const batch = [];
       for (let i = start; i < Math.min(start + 200, warmupRequests); i++) {
-        batch.push({ method: i % 2 === 0 ? 'GET' : 'HEAD', url: `${baseURL}/loadseed_${1 + i % hotSet}`,
+        batch.push({ method: redirectMethod || (i % 2 === 0 ? 'GET' : 'HEAD'), url: `${baseURL}/loadseed_${1 + i % hotSet}`,
           params: { redirects: 0, tags: { name: 'warmup', phase: 'warmup' } } });
       }
       for (const response of http.batch(batch)) {
@@ -156,7 +167,7 @@ function redirectBurst(url, expectedDestination) {
   for (let start = 0; start < redirectRepeats; start += redirectBatchSize) {
     const requests = [];
     for (let offset = start; offset < Math.min(start + redirectBatchSize, redirectRepeats); offset++) {
-      const method = (__ITER * redirectRepeats + offset) % 2 === 0 ? 'GET' : 'HEAD';
+      const method = redirectMethod || ((__ITER * redirectRepeats + offset) % 2 === 0 ? 'GET' : 'HEAD');
       const operation = method === 'GET' ? 'redirect_get' : 'redirect_head';
       requests.push({ method, url, params: { redirects: 0, tags: { name: `redirect ${method}`, operation } } });
     }
@@ -185,7 +196,7 @@ function listLinks() {
 }
 
 export function handleSummary(data) {
-  data.configuration = { workload, vus, duration, rate, warmupRequests, maxVUs, hotSet, redirectRepeats, redirectBatchSize, requestsPerIteration };
+  data.configuration = { workload, vus, duration, rate, rateStages, warmupRequests, maxVUs, hotSet, redirectMethod, redirectRepeats, redirectBatchSize, requestsPerIteration };
   const escaped = JSON.stringify(data, null, 2)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const rows = Object.entries(data.metrics).map(([name, metric]) => {

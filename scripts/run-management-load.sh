@@ -80,6 +80,7 @@ printf 'Results: %s\n' "$LOAD_RESULTS_DIR"
   printf 'docker_server_version='; docker version --format '{{.Server.Version}}'
   printf 'compose_version='; docker compose version --short
   printf 'load_script_sha256='; python3 -c 'import hashlib; print(hashlib.sha256(open("test/load/management.js", "rb").read()).hexdigest())'
+  printf 'k6_outputs=json,experimental-prometheus-rw\nprometheus_push_interval=2s\nprometheus_trend_stats=p(95),p(99),avg\n'
   git status --short
 } > "$LOAD_RESULTS_DIR/run.txt"
 
@@ -122,7 +123,8 @@ compose run --name "$generator_name" --no-deps \
   -e "SCENARIO=$scenario" -e "RATE=$rate" -e "WARMUP_REQUESTS=$warmup" \
   -e "DURATION_SECONDS=$duration" -e "VUS=$vus" -e "MAX_VUS=$max_vus" \
   -e DATA_FILE=/results/management-dataset.json -e K6_OUT= \
-  k6 run --out json=/results/events.json /scripts/management.js > "$LOAD_RESULTS_DIR/k6.log" 2>&1 || status=$?
+  k6 run --out json=/results/events.json --out experimental-prometheus-rw \
+  /scripts/management.js > "$LOAD_RESULTS_DIR/k6.log" 2>&1 || status=$?
 printf 'k6_exit_status=%s\n' "$status" >> "$LOAD_RESULTS_DIR/run.txt"
 if [ -n "${diagnostics_pid:-}" ]; then
   kill -TERM "$diagnostics_pid" 2>/dev/null || true

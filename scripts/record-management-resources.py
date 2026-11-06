@@ -12,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--public-memory-mib", type=int, choices=(32, 64), default=32)
     args = parser.parse_args()
     services = ("management", "public", "postgres", "redis", "proxy", "jaeger", "prometheus")
     result = {}
@@ -40,7 +41,8 @@ def main():
                 "restart_count": container["RestartCount"],
             }
             if service in ("management", "public"):
-                if host["NanoCpus"] != 500000000 or host["Memory"] != 33554432 or host["MemorySwap"] != 33554432:
+                expected_memory = (args.public_memory_mib if service == "public" else 32) * 1024 * 1024
+                if host["NanoCpus"] != 500000000 or host["Memory"] != expected_memory or host["MemorySwap"] != expected_memory:
                     errors.append(f"{service}: unexpected CPU or memory limit")
                 mounts = [mount for mount in container["Mounts"]
                           if mount["Destination"] == "/app/config/load.yaml"]
@@ -49,6 +51,8 @@ def main():
                     for mount in mounts
                 ]
                 environment = dict(item.split("=", 1) for item in container["Config"]["Env"] if "=" in item)
+                result[service]["gomemlimit"] = environment.get("GOMEMLIMIT")
+                result[service]["gomaxprocs"] = environment.get("GOMAXPROCS")
                 result[service]["app_env"] = environment.get("APP_ENV")
                 result[service]["app_config_dir"] = environment.get("APP_CONFIG_DIR")
                 if (environment.get("APP_ENV") != "load" or environment.get("APP_CONFIG_DIR") != "/app/config"
