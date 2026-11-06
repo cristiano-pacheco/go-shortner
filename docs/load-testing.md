@@ -8,6 +8,16 @@ LOAD_OPEN_BROWSER=0 LOAD_VUS=50 LOAD_DURATION=60s make test-load
 
 The command builds the image, starts the stack, runs migrations, seeds one million links and runs k6. Failed gates return a nonzero exit code. The stack stays running.
 
+## Prepare separate populations
+
+Use `LOAD_DATASET=1m ./scripts/prepare-load-dataset.sh` or `LOAD_DATASET=10m ./scripts/prepare-load-dataset.sh`. Each uses a separate Compose project and persistent PostgreSQL volume. The script builds the application image, starts PostgreSQL, applies migrations, and commits seed batches independently. Rerun the same command after interruption to resume. The progress row and each batch commit together. Do not run workload traffic while preparing a population.
+
+The preparation report in `reports/load/datasets/` records progress, elapsed time, visible and physical rows, table and index sizes, PostgreSQL statistics, maintenance timestamps and per-bucket count reconciliation. A failed or interrupted run leaves its partial report. The target is a seed count, not a guarantee that other workload-created rows are absent. Use a fresh volume when an exact starting population is required. `LOAD_SEED_BATCH_SIZE` defaults to 10,000. `LOAD_SEED_COUNT` overrides the target for small tests; do not use that override for the campaign. A target below the existing seed progress is rejected.
+
+Run `./test/load/prepare-dataset-integration.sh` to test interruption, resume, counter reconciliation and isolation with small populations. It creates and removes separate temporary Compose projects and volumes.
+
+Set `LOAD_DATASET=1m` or `LOAD_DATASET=10m` on `make test-load` to select the corresponding volume. Without it, the historical `shortner-load` project remains the default. Compose projects expose the same ports, so stop the previous stack before starting another. To remove a selected population, use `docker compose -p shortner-load-1m -f docker/docker-compose.load.yaml down -v` (or substitute `shortner-load-10m`). This deletes that population.
+
 ## Workloads
 
 | `LOAD_WORKLOAD` | Requests per iteration |
