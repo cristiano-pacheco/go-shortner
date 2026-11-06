@@ -86,11 +86,13 @@ if [ "${LOAD_SKIP_BUILD:-0}" != 1 ]; then
 fi
 compose up -d --no-build --remove-orphans proxy grafana
 # Bind-mounted configuration changes do not recreate containers automatically.
-compose restart proxy prometheus
+compose restart management public proxy prometheus grafana
+wait_for "http://127.0.0.1:${LOAD_JAEGER_PORT:-16687}/api/services"
 wait_for "http://127.0.0.1:${LOAD_PROMETHEUS_PORT:-9092}/-/ready"
 wait_for "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/api/health"
 open_browser "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/d/shortener-operations?orgId=1&refresh=5s"
 open_browser "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/d/load-test/load-test-live?orgId=1&refresh=5s"
+open_browser "http://127.0.0.1:${LOAD_JAEGER_PORT:-16687}/"
 
 printf 'Seeding up to %s links in the load database...\n' "$LOAD_SEED_COUNT"
 compose exec -T postgres psql -X -U shortner_load -d shortner_load \

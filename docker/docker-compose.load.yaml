@@ -92,6 +92,14 @@ services:
       - management
       - public
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: "10000"
+    ports:
+      - "127.0.0.1:${LOAD_JAEGER_PORT:-16687}:16686"
+
   prometheus:
     image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver"]
@@ -115,6 +123,7 @@ services:
       - ./observability/dashboards:/var/lib/grafana/dashboards/shortener:ro
     depends_on:
       - prometheus
+      - jaeger
 
   k6:
     image: grafana/k6:0.57.0

@@ -3,7 +3,7 @@ app:
     app_name: go-shortner
     app_version: "1.0.0"
     trace_enabled: true
-    trace_url: tempo:4317
+    trace_url: jaeger:4317
     exporter_type: grpc
     insecure: true
     sample_rate: 1.0

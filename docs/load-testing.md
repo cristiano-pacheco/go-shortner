@@ -43,7 +43,7 @@ Gates require less than 1% failed requests, over 99% passing checks and p95 belo
 | `LOAD_PUBLIC_CPUS` | `1.0` | Public CPU cap. Use `0.5` for the equal-total-CPU comparison. |
 | `LOAD_MANAGEMENT_CPUS` | `0.5` | Management CPU cap. |
 
-Each Go server has a 32 MiB limit, no swap, `GOMEMLIMIT=24MiB` and `GOMAXPROCS=1`. The combined 64 MiB excludes database, cache, proxy, generator and monitoring resources. Tracing is disabled. Metrics remain enabled.
+Each Go server has a 32 MiB limit, no swap, `GOMEMLIMIT=24MiB` and `GOMAXPROCS=1`. The combined 64 MiB excludes database, cache, proxy, generator and monitoring resources. Metrics and tracing are enabled; the load configuration samples 1% of root traces and exports them over OTLP gRPC to Jaeger. A parent trace's sampling decision is respected. Sampling and export add overhead, so results are not directly comparable to runs with tracing disabled (including the historical results in [performance.md](performance.md)).
 
 Data persists. Mixed iterations leave soft-deleted rows. Failed iterations may leave active links. The script runs `ANALYZE` before each test.
 
@@ -58,8 +58,9 @@ CPU and memory samples are not continuous peaks. The generator may limit through
 | Nginx | http://localhost:8088 | `LOAD_PORT` |
 | Grafana | http://localhost:3001 | `LOAD_GRAFANA_PORT` |
 | Prometheus | http://localhost:9092 | `LOAD_PROMETHEUS_PORT` |
+| Jaeger | http://localhost:16687 | `LOAD_JAEGER_PORT` |
 
-Grafana requires no login. Set `LOAD_OPEN_BROWSER=0` to suppress browser opening. This stack has no Tempo service.
+Grafana requires no login. Set `LOAD_OPEN_BROWSER=0` to suppress browser opening. In Jaeger, select the `go-shortner` service and search for traces after generating traffic. The low sampling rate means short or low-volume runs may produce no traces; increase `sample_rate` in `docker/load/load.yaml` for diagnosis and restart the application containers. Grafana also provisions a Jaeger datasource for Explore. Jaeger uses in-memory storage capped at 10,000 traces; traces are lost when its container restarts. The current instrumentation includes use-case, repository and cache spans, but not HTTP server spans. Avoid exposing this local stack publicly; traces may contain sensitive details.
 
 ## Check migrations
 

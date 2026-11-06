@@ -18,9 +18,9 @@
   },
   "links": [
     {
-      "title": "Explore traces in Tempo",
+      "title": "Explore traces in Jaeger",
       "type": "link",
-      "url": "/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22queryType%22:%22search%22%7D%5D%7D",
+      "url": "/explore?left=%7B%22datasource%22:%22jaeger%22,%22queries%22:%5B%7B%7D%5D%7D",
       "targetBlank": false
     }
   ],

@@ -49,16 +49,15 @@ services:
       - ./observability/dashboards:/var/lib/grafana/dashboards/shortener:ro
       - grafana_data:/var/lib/grafana
 
-  tempo:
-    image: grafana/tempo:2.8.2@sha256:0ef775495967cd5d7a6b2e146b6ea695d624803c8db8349fb8ce4164f719f9b7
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f
     profiles: [observability]
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
-      - tempo_data:/var/tempo
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${JAEGER_PORT:-16686}:16686"
 
 volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
-  tempo_data:

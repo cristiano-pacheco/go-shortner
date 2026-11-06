@@ -40,7 +40,7 @@ flowchart TB
         direction LR
         PROM["Prometheus<br>:9091"]
         GRAF["Grafana<br>:3000"]
-        TEMPO["Tempo<br>traces"]
+        JAEGER["Jaeger<br>traces · :16686"]
         PROM --> GRAF
     end
 
@@ -68,7 +68,7 @@ flowchart TB
     class MGW,MUC mgmt
     class PR,RUC pub
     class REDIS,PG data
-    class PROM,GRAF,TEMPO obs
+    class PROM,GRAF,JAEGER obs
 
     style APP fill:#ffffff,stroke:#a1a1aa,stroke-width:2px
     style MGMT fill:#faf5ff,stroke:#c084fc,stroke-width:2px
@@ -89,7 +89,7 @@ How to read it:
 - **Visitor → Public redirector (`:8081`)** — `GET`/`HEAD` only. No key, no management surface.
 - **Hot path ① → ② → ③** — the resolver checks the Redis snapshot first, answers `302` on a hit, and only queries PostgreSQL on a miss (or if Redis is down). A changed link can serve stale data for at most 60 seconds.
 - **PostgreSQL** — the single source of truth: soft deletes, expiration, active state, and the counters that keep pagination totals exact.
-- **Prometheus + Tempo → Grafana** — both servers export metrics and traces on their own listeners.
+- **Prometheus + Grafana / Jaeger** — both servers export metrics to Prometheus and traces to Jaeger.
 
 A single redirect, as a decision flow — every branch ends in either `302` or `404`:
 
@@ -147,6 +147,7 @@ make setup
 | Management API | http://localhost:8080 |
 | Public redirects | http://localhost:8081 |
 | Grafana | http://localhost:3000 |
+| Jaeger | http://localhost:16686 |
 
 Setup creates credentials, runs migrations and seeds example links. Grafana uses `admin` / `admin`. Stop with `make docker-down`.
 
