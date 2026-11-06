@@ -41,8 +41,8 @@ case "$LOAD_SEED_COUNT" in
   *[!0-9]*|'') echo 'LOAD_SEED_COUNT must be a non-negative integer' >&2; exit 1 ;;
 esac
 case "${LOAD_WORKLOAD:-mixed}" in
-  mixed|redirect|list) ;;
-  *) echo 'LOAD_WORKLOAD must be mixed, redirect or list' >&2; exit 1 ;;
+  mixed|read-heavy|redirect|list) ;;
+  *) echo 'LOAD_WORKLOAD must be mixed, read-heavy, redirect or list' >&2; exit 1 ;;
 esac
 case "${LOAD_HOT_SET:-1000}" in
   *[!0-9]*|''|0) echo 'LOAD_HOT_SET must be a positive integer' >&2; exit 1 ;;
@@ -55,6 +55,11 @@ fi
 for value in "${LOAD_RATE:-0}" "${LOAD_WARMUP_REQUESTS:-0}"; do
   case "$value" in
     *[!0-9]*|'') echo 'LOAD_RATE and LOAD_WARMUP_REQUESTS must be non-negative integers' >&2; exit 1 ;;
+  esac
+done
+for value in "${LOAD_REDIRECT_REPEATS:-1}" "${LOAD_REDIRECT_BATCH_SIZE:-1}"; do
+  case "$value" in
+    *[!0-9]*|''|0) echo 'LOAD_REDIRECT_REPEATS and LOAD_REDIRECT_BATCH_SIZE must be positive integers' >&2; exit 1 ;;
   esac
 done
 # Docker enforces network-name uniqueness across clients sharing the daemon.
@@ -86,11 +91,13 @@ if [ "${LOAD_SKIP_BUILD:-0}" != 1 ]; then
 fi
 compose up -d --no-build --remove-orphans proxy grafana
 # Bind-mounted configuration changes do not recreate containers automatically.
-compose restart proxy prometheus
+compose restart management public proxy prometheus grafana
+wait_for "http://127.0.0.1:${LOAD_JAEGER_PORT:-16687}/api/services"
 wait_for "http://127.0.0.1:${LOAD_PROMETHEUS_PORT:-9092}/-/ready"
 wait_for "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/api/health"
 open_browser "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/d/shortener-operations?orgId=1&refresh=5s"
 open_browser "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/d/load-test/load-test-live?orgId=1&refresh=5s"
+open_browser "http://127.0.0.1:${LOAD_JAEGER_PORT:-16687}/"
 
 printf 'Seeding up to %s links in the load database...\n' "$LOAD_SEED_COUNT"
 compose exec -T postgres psql -X -U shortner_load -d shortner_load \
@@ -102,6 +109,7 @@ printf 'Results: %s\n' "$LOAD_RESULTS_DIR"
   printf 'workload=%s vus=%s duration=%s seed_target=%s hot_set=%s rate=%s max_vus=%s warmup_requests=%s\n' \
     "${LOAD_WORKLOAD:-mixed}" "${LOAD_VUS:-10}" "${LOAD_DURATION:-2m}" "$LOAD_SEED_COUNT" "${LOAD_HOT_SET:-1000}" "${LOAD_RATE:-0}" "${LOAD_MAX_VUS:-200}" "${LOAD_WARMUP_REQUESTS:-0}"
   docker version --format 'Docker server: {{.Server.Version}}'
+  printf 'redirect_repeats=%s redirect_batch_size=%s\n' "${LOAD_REDIRECT_REPEATS:-workload-default}" "${LOAD_REDIRECT_BATCH_SIZE:-1}"
   git rev-parse HEAD
   git status --short
 } > "$LOAD_RESULTS_DIR/environment.txt"
@@ -133,7 +141,7 @@ for container in $(compose ps -q); do
   docker inspect --format '{{.Name}} memory_limit={{.HostConfig.Memory}} nano_cpus={{.HostConfig.NanoCpus}} oom_killed={{.State.OOMKilled}} restarts={{.RestartCount}} image={{.Image}}' "$container"
 done > "$LOAD_RESULTS_DIR/containers.txt"
 for query in \
-  'histogram_quantile(0.95,sum by(le,operation)(rate(shortener_repository_operation_duration_seconds_bucket[1m])))' \
+  'histogram_quantile(0.99,sum by(le,operation)(rate(shortener_repository_operation_duration_seconds_bucket[1m])))' \
   'sum by(source)(rate(shortener_resolution_success_total[1m]))' \
   'sum by(instance)(rate(process_cpu_seconds_total[1m]))'; do
   printf '\n%s\n' "$query" >> "$LOAD_RESULTS_DIR/prometheus.txt"

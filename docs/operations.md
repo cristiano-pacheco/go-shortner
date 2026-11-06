@@ -34,13 +34,13 @@ docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-co
 
 ## Local observability services
 
-`make setup` starts Prometheus, Grafana and Tempo alongside the application. To start only the observability services after the application is running, use:
+`make setup` starts Prometheus, Grafana and Jaeger alongside the application. To start only the observability services after the application is running, use:
 
 ```sh
-docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml --profile observability up -d prometheus grafana tempo
+docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.app.yaml --profile observability up -d prometheus grafana jaeger
 ```
 
-Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`. Set `GRAFANA_PORT` or `PROMETHEUS_PORT` to change those localhost-only ports. Grafana's local default login is `admin` / `admin`; change the password when prompted. Prometheus and Tempo datasources are provisioned as `prometheus` and `tempo`. This local configuration is not intended for internet exposure.
+Grafana is available at `http://localhost:3000`, Prometheus at `http://localhost:9091`, and Jaeger at `http://localhost:16686`. Set `GRAFANA_PORT`, `PROMETHEUS_PORT` or `JAEGER_PORT` to change those localhost-only ports. Grafana's local default login is `admin` / `admin`; change the password when prompted. Prometheus and Jaeger datasources are provisioned as `prometheus` and `jaeger`. This local configuration is not intended for internet exposure.
 
 Prometheus scrapes `app:9090` and `public:9090` with role labels. Management metrics use host port `METRICS_PORT`, default 9090. Public metrics use `PUBLIC_METRICS_PORT`, default 9093. Check metrics and targets:
 
@@ -49,15 +49,15 @@ curl --fail http://localhost:9090/metrics
 curl --fail 'http://localhost:9091/api/v1/targets?state=active'
 ```
 
-Open Grafana's **Shortener operations** dashboard, select an instance and time range, and use **Explore traces in Tempo** to search for traces. Generate traffic first, for example `curl -i http://localhost:8081/example-go`. The dashboard can show empty panels when there are no requests; that alone does not indicate an outage. The provisioned datasource and dashboard files are in `docker/observability/`. Grafana reads them at startup without a manual import.
+Generate traffic first, for example `curl -i http://localhost:8081/example-go`. Open Jaeger, select service `go-shortner` and search for traces. Alternatively, use **Explore traces in Jaeger** in Grafana's **Shortener operations** dashboard. The dashboard can show empty panels when there are no requests; that alone does not indicate an outage. The provisioned datasource and dashboard files are in `docker/observability/`. Grafana reads them at startup without a manual import.
 
-Tempo accepts OTLP gRPC at `tempo:4317` and OTLP HTTP at `tempo:4318` on the Compose network. The application exports traces over gRPC. Neither Prometheus nor Tempo is required for application startup.
+Jaeger accepts OTLP gRPC at `jaeger:4317` and OTLP HTTP at `jaeger:4318` on the Compose network. The application exports traces over gRPC. Neither Prometheus nor Jaeger is required for application startup.
 
-Stop these services with the same Compose files and `down`, or use `make docker-down` to stop the whole project. Named Prometheus, Grafana and Tempo volumes remain after `down`. Add `-v` to the Compose `down` command with the observability profile enabled to remove those volumes and the PostgreSQL volume. Prometheus retains data for 15 days, and Tempo retains trace blocks for 24 hours.
+Stop these services with the same Compose files and `down`, or use `make docker-down` to stop the whole project. Named Prometheus and Grafana volumes remain after `down`. Add `-v` to the Compose `down` command with the observability profile enabled to remove those volumes and the PostgreSQL volume. Prometheus retains data for 15 days. Jaeger uses bounded in-memory storage for local development: traces are lost when its container restarts. Existing Tempo volumes are not migrated or removed automatically.
 
 ## Tracing configuration
 
-The application declares Bricks `trace.Module` in `cmd/server.go`. Bricks initializes and stops the go-otel provider through Fx; application code does not initialize a second provider. `config/base.yaml` supplies `app.open-telemetry`: `trace_enabled`, `trace_url`, `exporter_type`, `insecure`, `sample_rate`, `batch_timeout`, `max_batch_size`, `max_queue_size`, `export_timeout` and `shutdown_timeout`. The supplied configuration enables gRPC export to `tempo:4317`, uses root sampling rate `1.0`, a queue of 2048 spans, a batch size of 512, a 3-second export timeout and a 5-second shutdown timeout. Sampling respects a parent decision; set `sample_rate` between 0 and 1 for root spans. Set `trace_enabled: false` to disable export. Invalid local configuration rejects startup. Export errors, including an unavailable Tempo backend, do not fail business requests. HTTP drains before tracing stops, within the application's 30-second shutdown budget.
+The application declares Bricks `trace.Module` in `cmd/server.go`. Bricks initializes and stops the go-otel provider through Fx; application code does not initialize a second provider. `config/base.yaml` supplies `app.open-telemetry`: `trace_enabled`, `trace_url`, `exporter_type`, `insecure`, `sample_rate`, `batch_timeout`, `max_batch_size`, `max_queue_size`, `export_timeout` and `shutdown_timeout`. The supplied configuration enables gRPC export to `jaeger:4317`, uses root sampling rate `1.0`, a queue of 2048 spans, a batch size of 512, a 3-second export timeout and a 5-second shutdown timeout. Sampling respects a parent decision; set `sample_rate` between 0 and 1 for root spans. Set `trace_enabled: false` to disable export. Invalid local configuration rejects startup. Export errors, including an unavailable Jaeger backend, do not fail business requests. HTTP drains before tracing stops, within the application's 30-second shutdown budget.
 
 Bricks supports independent `app.database.tracing.enabled` and `app.redis.tracing.enabled` switches, both disabled by default. Consumers must also declare the corresponding Bricks instrumentation modules. This application does not currently declare those modules or enable the switches. It creates use-case, repository and cache spans and extracts incoming W3C trace context, but does not create HTTP server spans. Plugin controls can disable SQL and Redis statement capture, but third-party exception or status messages can still contain sensitive details. Do not assume all traces are sanitized.
 
