@@ -14,8 +14,13 @@ SELECT 'loadseed_' || n::text,
        'https://example.com/load-seed/' || n::text,
        NOW() - (n % 31536000) * INTERVAL '1 second',
        NOW() - (n % 31536000) * INTERVAL '1 second'
-FROM generate_series((SELECT seeded + 1 FROM load_seed_progress WHERE id), :target::bigint) AS n;
+FROM generate_series(
+    (SELECT seeded + 1 FROM load_seed_progress WHERE id),
+    LEAST((SELECT seeded + :batch_size::bigint FROM load_seed_progress WHERE id), :target::bigint)
+) AS n;
 
-UPDATE load_seed_progress SET seeded = GREATEST(seeded, :target::bigint) WHERE id;
+UPDATE load_seed_progress
+SET seeded = GREATEST(seeded, LEAST(seeded + :batch_size::bigint, :target::bigint))
+WHERE id;
 COMMIT;
-ANALYZE links;
+SELECT seeded FROM load_seed_progress WHERE id;

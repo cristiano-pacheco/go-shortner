@@ -2,8 +2,13 @@
 set -eu
 
 cd "$(dirname "$0")/.."
+case "${LOAD_DATASET:-}" in
+  '') load_project=shortner-load ;;
+  1m|10m) load_project=shortner-load-$LOAD_DATASET ;;
+  *) echo 'LOAD_DATASET must be 1m or 10m' >&2; exit 1 ;;
+esac
 compose() {
-  docker compose -p shortner-load -f docker/docker-compose.load.yaml "$@"
+  docker compose -p "$load_project" -f docker/docker-compose.load.yaml "$@"
 }
 
 open_browser() {
@@ -36,7 +41,16 @@ wait_for() {
 
 command -v curl >/dev/null || { echo 'curl is required' >&2; exit 1; }
 command -v tar >/dev/null || { echo 'tar is required' >&2; exit 1; }
-LOAD_SEED_COUNT=${LOAD_SEED_COUNT:-1000000}
+case "${LOAD_DATASET:-}" in
+  10m) default_seed_count=10000000 ;;
+  *) default_seed_count=1000000 ;;
+esac
+LOAD_SEED_COUNT=${LOAD_SEED_COUNT:-$default_seed_count}
+LOAD_SEED_BATCH_SIZE=${LOAD_SEED_BATCH_SIZE:-10000}
+case "$LOAD_SEED_BATCH_SIZE" in
+  *[!0-9]*|''|0) echo 'LOAD_SEED_BATCH_SIZE must be a positive integer' >&2; exit 1 ;;
+esac
+export LOAD_SEED_COUNT LOAD_SEED_BATCH_SIZE
 case "$LOAD_SEED_COUNT" in
   *[!0-9]*|'') echo 'LOAD_SEED_COUNT must be a non-negative integer' >&2; exit 1 ;;
 esac
@@ -100,8 +114,18 @@ open_browser "http://127.0.0.1:${LOAD_GRAFANA_PORT:-3001}/d/load-test/load-test-
 open_browser "http://127.0.0.1:${LOAD_JAEGER_PORT:-16687}/"
 
 printf 'Seeding up to %s links in the load database...\n' "$LOAD_SEED_COUNT"
-compose exec -T postgres psql -X -U shortner_load -d shortner_load \
-  -v target="$LOAD_SEED_COUNT" < docker/load/seed.sql
+if [ -n "${LOAD_DATASET:-}" ] && [ "$LOAD_SEED_COUNT" -ne 0 ]; then
+  LOAD_SKIP_BUILD=1 ./scripts/prepare-load-dataset.sh
+else
+  while :; do
+    output=$(compose exec -T postgres psql -X -qAt -U shortner_load -d shortner_load \
+      -v target="$LOAD_SEED_COUNT" -v batch_size="$LOAD_SEED_BATCH_SIZE" < docker/load/seed.sql)
+    seeded=$(printf '%s\n' "$output" | tail -n 1)
+    printf 'Committed seed progress: %s\n' "$seeded"
+    [ "$seeded" -lt "$LOAD_SEED_COUNT" ] || break
+  done
+  compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U shortner_load -d shortner_load -c 'ANALYZE links'
+fi
 
 printf 'Results: %s\n' "$LOAD_RESULTS_DIR"
 {
@@ -116,7 +140,7 @@ printf 'Results: %s\n' "$LOAD_RESULTS_DIR"
 compose config > "$LOAD_RESULTS_DIR/compose.yaml"
 # Keep uncommitted/new build inputs too; a revision plus dirty paths is insufficient.
 tar -czf "$LOAD_RESULTS_DIR/source.tar.gz" go.mod go.sum main.go cmd internal config \
-  Dockerfile docker scripts/load-test.sh test/load
+  Dockerfile docker scripts/load-test.sh scripts/prepare-load-dataset.sh test/load
 compose exec -T postgres psql -X -U shortner_load -d shortner_load \
   -c 'SELECT count(*) AS rows, count(*) FILTER (WHERE deleted_at IS NULL) AS visible_rows FROM links' \
   > "$LOAD_RESULTS_DIR/dataset.txt"
@@ -125,7 +149,7 @@ compose exec -T postgres psql -X -U shortner_load -d shortner_load \
   while :; do
     date -u '+%Y-%m-%dT%H:%M:%SZ'
     docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' \
-      $(docker ps -q --filter label=com.docker.compose.project=shortner-load) || true
+      $(docker ps -q --filter label=com.docker.compose.project="$load_project") || true
     sleep 2
   done
 ) > "$LOAD_RESULTS_DIR/resources.txt" 2>&1 &

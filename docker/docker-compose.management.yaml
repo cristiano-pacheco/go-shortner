@@ -1,0 +1,16 @@
+services:
+  management:
+    cpus: 0.5
+    mem_limit: 32m
+    memswap_limit: 32m
+    volumes:
+      - ./load/management.yaml:/app/config/load.yaml:ro
+
+  public:
+    cpus: 0.5
+    mem_limit: ${LOAD_PUBLIC_MEMORY:-32m}
+    memswap_limit: ${LOAD_PUBLIC_MEMORY:-32m}
+    environment:
+      GOMEMLIMIT: ${LOAD_PUBLIC_GOMEMLIMIT:-24MiB}
+    volumes:
+      - ./load/management.yaml:/app/config/load.yaml:ro
