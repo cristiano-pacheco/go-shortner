@@ -61,6 +61,16 @@ func runServer(cmd *cobra.Command, options ...fx.Option) (runErr error) {
 		runErr = errors.Join(runErr, app.Stop(stopCtx))
 	}()
 
+	profileServer, err := startProfiling()
+	if err != nil {
+		return err
+	}
+	if profileServer != nil {
+		defer func() {
+			runErr = errors.Join(runErr, profileServer.Close())
+		}()
+	}
+
 	select {
 	case <-cmd.Context().Done():
 	case signal := <-app.Wait():

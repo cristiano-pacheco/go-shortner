@@ -1,0 +1,12 @@
+# Apply only for diagnostic runs. Profiling consumes resources and changes results.
+services:
+  management:
+    environment:
+      LOAD_ENABLE_PROFILING: "1"
+    tmpfs:
+      - /tmp:mode=1777
+  public:
+    environment:
+      LOAD_ENABLE_PROFILING: "1"
+    tmpfs:
+      - /tmp:mode=1777
